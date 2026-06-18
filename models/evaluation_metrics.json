@@ -1,0 +1,52 @@
+{
+  "random_forest": {
+    "accuracy": 0.978,
+    "f1_macro": 0.9714,
+    "f1_weighted": 0.9782,
+    "auc_roc": 0.9992,
+    "report": "              precision    recall  f1-score   support\n\n         Low       0.99      0.99      0.99       566\n      Medium       1.00      0.97      0.98       848\n        High       0.90      1.00      0.95       221\n\n    accuracy                           0.98      1635\n   macro avg       0.96      0.98      0.97      1635\nweighted avg       0.98      0.98      0.98      1635\n",
+    "confusion_matrix": [
+      [
+        560,
+        4,
+        2
+      ],
+      [
+        7,
+        819,
+        22
+      ],
+      [
+        1,
+        0,
+        220
+      ]
+    ]
+  },
+  "gradient_boosting": {
+    "accuracy": 0.9994,
+    "f1_macro": 0.9995,
+    "f1_weighted": 0.9994,
+    "auc_roc": 0.9999,
+    "report": "              precision    recall  f1-score   support\n\n         Low       1.00      1.00      1.00       566\n      Medium       1.00      1.00      1.00       848\n        High       1.00      1.00      1.00       221\n\n    accuracy                           1.00      1635\n   macro avg       1.00      1.00      1.00      1635\nweighted avg       1.00      1.00      1.00      1635\n",
+    "confusion_matrix": [
+      [
+        566,
+        0,
+        0
+      ],
+      [
+        1,
+        847,
+        0
+      ],
+      [
+        0,
+        0,
+        221
+      ]
+    ],
+    "cv_f1_mean": 0.9995,
+    "cv_f1_std": 0.0005
+  }
+}

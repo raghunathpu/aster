@@ -1,0 +1,16 @@
+event_cause,total_events,high_impact_pct,medium_impact_pct,road_closure_pct,median_duration_min
+vehicle_breakdown,4896,2.1,65.5,4.3,40.7
+others,641,4.7,57.7,8.6,439.0
+pot_holes,537,0.9,53.4,2.4,12989.9
+construction,480,71.7,3.5,26.5,2945.2
+water_logging,458,62.0,0.9,8.5,3688.3
+accident,365,47.4,0.3,3.0,40.0
+tree_fall,284,8.5,54.2,39.4,732.1
+road_conditions,170,7.1,51.8,12.4,9236.3
+congestion,136,1.5,70.6,4.4,71.5
+public_event,84,78.6,0.0,46.4,
+procession,72,47.2,1.4,26.4,36.5
+vip_movement,20,90.0,0.0,80.0,
+protest,15,73.3,0.0,40.0,24.5
+debris,13,7.7,69.2,15.4,86853.3
+fog_visibility,2,0.0,50.0,0.0,
