@@ -1,0 +1,714 @@
+﻿"""
+ASTER - Adaptive Smart Traffic Event Response
+================================================
+Streamlit Demo Application
+
+Run:  streamlit run app/aster_app.py
+"""
+
+import os, sys, json, joblib, datetime
+import pandas as pd
+import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import seaborn as sns
+import streamlit as st
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
+from src.preprocessing.data_loader import preprocess
+from src.features.feature_engineering import build_features, encode_for_model
+from src.recommendation.engine import (
+    generate_response_plan, plan_to_dict,
+    RESPONSE_PRIORITY_TABLE, MANPOWER_TABLE
+)
+
+# ─────────────────────────────────────────────────────────────────
+# Page config
+# ─────────────────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="ASTER - Traffic Intelligence",
+    page_icon="🚦",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ─────────────────────────────────────────────────────────────────
+# Styling
+# ─────────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+  html, body, [class*="css"] { font-family: 'Inter', 'Segoe UI', sans-serif; }
+  .main { background: #0F1729; }
+  .block-container { padding: 1.5rem 2rem; max-width: 1400px; }
+  .stMetric { background: #1E2D4E; border-radius: 10px; padding: 12px 16px; border: 1px solid #2D4070; }
+  .stMetric label { color: #93C5FD !important; font-size: 0.75rem !important; }
+  .stMetric .metric-value { color: #E2E8F0 !important; }
+  div[data-testid="stSidebar"] { background: #0A1020 !important; }
+
+  .card {
+    background: #1E2D4E;
+    border: 1px solid #2D4070;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+  }
+  .tier-high  { border-left: 4px solid #EF4444; }
+  .tier-med   { border-left: 4px solid #F59E0B; }
+  .tier-low   { border-left: 4px solid #22C55E; }
+
+  .badge-high { background:#7F1D1D; color:#FCA5A5; padding:3px 10px; border-radius:999px; font-size:0.78rem; font-weight:700; }
+  .badge-med  { background:#78350F; color:#FCD34D; padding:3px 10px; border-radius:999px; font-size:0.78rem; font-weight:700; }
+  .badge-low  { background:#14532D; color:#86EFAC; padding:3px 10px; border-radius:999px; font-size:0.78rem; font-weight:700; }
+
+  .action-item { background:#0D1B2E; border-radius:8px; padding:8px 12px; margin:4px 0; color:#CBD5E1; font-size:0.88rem; }
+  .section-title { color:#93C5FD; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:8px; }
+  h1 { color: #E2E8F0 !important; }
+  h2, h3 { color: #93C5FD !important; }
+  .stSelectbox label, .stSlider label, .stRadio label, .stCheckbox label { color: #CBD5E1 !important; }
+  .stButton>button {
+    background: linear-gradient(135deg, #2563EB, #1D4ED8);
+    color: white; border: none; border-radius: 8px;
+    padding: 0.5rem 2rem; font-weight: 600; font-size: 0.95rem;
+    transition: all 0.2s;
+  }
+  .stButton>button:hover { background: linear-gradient(135deg, #3B82F6, #2563EB); transform: translateY(-1px); }
+</style>
+""", unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────────────────────────
+# Constants
+# ─────────────────────────────────────────────────────────────────
+TIER_COLORS = {"Low": "#22C55E", "Medium": "#F59E0B", "High": "#EF4444"}
+TIER_EMOJI  = {"Low": "🟢", "Medium": "🟡", "High": "🔴"}
+TIER_BADGE_CLASS = {"Low": "badge-low", "Medium": "badge-med", "High": "badge-high"}
+TIER_CARD_CLASS  = {"Low": "tier-low",  "Medium": "tier-med",  "High": "tier-high"}
+ASSETS = os.path.join(ROOT, "assets")
+MODELS = os.path.join(ROOT, "models")
+
+CAUSE_LABELS = {
+    "vehicle_breakdown": "Vehicle Breakdown",
+    "accident": "Accident",
+    "construction": "Construction",
+    "water_logging": "Water Logging",
+    "pot_holes": "Potholes",
+    "tree_fall": "Tree Fall",
+    "public_event": "Public Event",
+    "procession": "Procession / Rally",
+    "protest": "Protest",
+    "vip_movement": "VIP Movement",
+    "road_conditions": "Road Conditions",
+    "congestion": "General Congestion",
+    "others": "Others",
+    "fog_visibility": "Fog / Low Visibility",
+    "debris": "Debris on Road",
+    "unknown": "Unknown",
+}
+
+CORRIDORS = [
+    "Non-corridor", "Mysore Road", "Bellary Road 1", "Bellary Road 2",
+    "Tumkur Road", "Hosur Road", "ORR North 1", "Old Madras Road",
+    "Magadi Road", "ORR East 1", "ORR North 2", "Bannerghata Road",
+    "ORR East 2", "West of Chord Road", "ORR West 1", "CBD 2",
+    "Hennur Main Road", "IRR(Thanisandra road)", "Varthur Road", "Old Airport Road",
+]
+
+ZONES = [
+    "Central Zone 1", "Central Zone 2", "North Zone 1", "North Zone 2",
+    "South Zone 1", "South Zone 2", "East Zone 1", "East Zone 2",
+    "West Zone 1", "West Zone 2", "Unknown",
+]
+
+
+# ─────────────────────────────────────────────────────────────────
+# Data & model loader (cached)
+# ─────────────────────────────────────────────────────────────────
+@st.cache_data(show_spinner=False)
+def load_data():
+    p = os.path.join(ROOT, "data", "bengaluru_traffic_events.csv")
+    df = preprocess(p)
+    df = build_features(df)
+    df["start_local"] = df["start_datetime"].dt.tz_convert("Asia/Kolkata")
+    return df
+
+
+@st.cache_resource(show_spinner=False)
+def load_model():
+    gb   = joblib.load(os.path.join(MODELS, "gb_main.pkl"))
+    enc  = joblib.load(os.path.join(MODELS, "encoders.pkl"))
+    le   = joblib.load(os.path.join(MODELS, "label_encoder.pkl"))
+    fnames = joblib.load(os.path.join(MODELS, "feature_names.pkl"))
+    fi   = pd.read_csv(os.path.join(MODELS, "feature_importance.csv"))
+    with open(os.path.join(MODELS, "evaluation_metrics.json")) as f:
+        metrics = json.load(f)
+    return gb, enc, le, fnames, fi, metrics
+
+
+def predict_event(event_dict, gb, enc, le, fnames):
+    """Run full inference pipeline on a single event dict."""
+    import zoneinfo
+    IST = zoneinfo.ZoneInfo("Asia/Kolkata")
+    from src.preprocessing.data_loader import NAMED_CORRIDORS
+
+    row = pd.DataFrame([event_dict])
+    row["start_datetime"] = pd.to_datetime(row.get("start_datetime", pd.Timestamp.now(tz="UTC")),
+                                            utc=True, errors="coerce")
+    row["start_local"] = row["start_datetime"].dt.tz_convert(IST)
+    row["corridor"] = row["corridor"].fillna("Non-corridor")
+    row["is_named_corridor"] = row["corridor"].isin(NAMED_CORRIDORS).astype(int)
+    row["road_closure_flag"] = row["requires_road_closure"].astype(str).str.lower().isin(
+        ["true", "1", "yes"]).astype(int)
+    row["priority"] = row.get("priority", pd.Series(["High"])).fillna("High")
+    row["veh_type"] = row.get("veh_type", pd.Series(["unknown"])).fillna("unknown")
+    row["zone"] = row["zone"].fillna("Unknown")
+    row["police_station"] = row.get("police_station", pd.Series(["Unknown"])).fillna("Unknown")
+
+    row = build_features(row)
+    X, _ = encode_for_model(row, fit_encoders=enc)
+    for col in fnames:
+        if col not in X.columns:
+            X[col] = 0
+    X = X[fnames]
+
+    probs  = gb.predict_proba(X)[0]
+    pred_i = int(np.argmax(probs))
+    label  = le.classes_[pred_i]
+    prob_d = {le.classes_[i]: round(float(p), 4) for i, p in enumerate(probs)}
+    return label, prob_d, round(float(probs[pred_i]), 4)
+
+
+def compute_raw_impact_score(event_dict):
+    HIGH_CAUSES = {"accident","construction","public_event","protest","procession","vip_movement","water_logging"}
+    NC = {"Mysore Road","Bellary Road 1","Bellary Road 2","Tumkur Road","Hosur Road",
+          "ORR North 1","Old Madras Road","Magadi Road","ORR East 1","ORR North 2",
+          "Bannerghata Road","ORR East 2","West of Chord Road","ORR West 1","CBD 2"}
+    score = 1
+    if str(event_dict.get("requires_road_closure", False)).lower() in ["true","1","yes"]:
+        score += 2
+    if event_dict.get("priority") == "High":
+        score += 1
+    if event_dict.get("event_cause") in HIGH_CAUSES:
+        score += 1
+    if event_dict.get("corridor") in NC:
+        score += 1
+    return min(score, 6)
+
+
+# ─────────────────────────────────────────────────────────────────
+# Sidebar
+# ─────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## 🚦 ASTER")
+    st.markdown("**Adaptive Smart Traffic Event Response**")
+    st.markdown("---")
+    page = st.radio(
+        "Navigation",
+        ["🏠 Overview", "📊 EDA & Insights", "🔮 Predict & Respond", "📈 Model Performance"],
+        label_visibility="collapsed",
+    )
+    st.markdown("---")
+    st.markdown(
+        "**Data:** 8,173 events · Nov 2023 - Apr 2024\n\n"
+        "**Coverage:** Bengaluru, Karnataka\n\n"
+        "**Model:** Gradient Boosting\n\n"
+        "**Accuracy:** 99.9%  |  AUC: 0.9999"
+    )
+    st.markdown("---")
+    st.caption("Bengaluru Traffic Intelligence · 2024")
+
+
+# ─────────────────────────────────────────────────────────────────
+# Load data & model
+# ─────────────────────────────────────────────────────────────────
+with st.spinner("Loading data and model…"):
+    df = load_data()
+    gb, enc, le, fnames, fi, metrics = load_model()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PAGE 0 - OVERVIEW
+# ═══════════════════════════════════════════════════════════════════
+if page == "🏠 Overview":
+    st.markdown("# 🚦 ASTER - Adaptive Smart Traffic Event Response")
+    st.markdown(
+        "> *Forecast event-driven congestion before it becomes a crisis. "
+        "Recommend the right operational response before the first cone is placed.*"
+    )
+    st.markdown("---")
+
+    # KPI Row
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    total_events   = len(df)
+    high_events    = (df["impact_tier"] == "High").sum()
+    planned_events = (df["event_type"] == "planned").sum()
+    closure_events = df["road_closure_flag"].sum()
+    corridors_hit  = df[df["corridor"] != "Non-corridor"]["corridor"].nunique()
+    avg_dur        = df["duration_minutes"].dropna().median()
+
+    c1.metric("Total Events",      f"{total_events:,}")
+    c2.metric("High Impact",       f"{high_events:,}",      f"{high_events/total_events*100:.1f}%")
+    c3.metric("Planned Events",    f"{planned_events:,}",   f"{planned_events/total_events*100:.1f}%")
+    c4.metric("Road Closures",     f"{closure_events:,}")
+    c5.metric("Corridors Affected",f"{corridors_hit}")
+    c6.metric("Median Resolution", f"{avg_dur:.0f} min")
+
+    st.markdown("---")
+
+    col_l, col_r = st.columns([3, 2])
+    with col_l:
+        st.markdown("### The Problem We Solve")
+        st.markdown("""
+Bengaluru handles **over 7 million vehicle trips per day**. When a vehicle breaks down on Mysore Road
+at 8 AM, or a procession blocks ORR North during evening peak, the response is reactive - officers
+are deployed by experience, not evidence.
+
+**ASTER changes that.**
+
+We ingest historical event data from the traffic operations system, build a **Gradient Boosting impact
+classifier**, and wrap it with an **operational decision engine** that converts model predictions
+into a specific, actionable response plan - in under 2 seconds.
+        """)
+
+        st.markdown("### How It Works")
+        st.markdown("""
+| Step | What Happens |
+|------|--------------|
+| **1. Event Logged** | Officer or citizen reports an incident via ASTRAM |
+| **2. ASTER Classifies** | ML model predicts Low / Medium / High impact |
+| **3. Context Escalation** | Rules engine checks peak hour, junction, corridor |
+| **4. Response Plan** | Manpower, barricading, diversion, deployment time |
+| **5. Officer Acts** | Specific, prioritised action checklist delivered |
+        """)
+
+    with col_r:
+        st.markdown("### Impact Distribution")
+        img_path = os.path.join(ASSETS, "eda_impact_dist.png")
+        if os.path.exists(img_path):
+            st.image(img_path, use_container_width=True)
+
+        st.markdown("### The Three-Tier System")
+        for tier, color, desc in [
+            ("🟢 Low", "#22C55E", "1-2 officers · monitor only · no diversion"),
+            ("🟡 Medium", "#F59E0B", "2-4 officers · light barricading · advisory"),
+            ("🔴 High", "#EF4444", "4-8 officers · full closure · mandatory diversion"),
+        ]:
+            st.markdown(
+                f'<div class="card"><strong style="color:{color}">{tier}</strong> - {desc}</div>',
+                unsafe_allow_html=True
+            )
+
+    st.markdown("---")
+    st.markdown("### Data Snapshot - Training Dataset")
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        st.markdown("**Top Event Causes**")
+        cause_counts = df["event_cause"].value_counts().head(6)
+        for cause, cnt in cause_counts.items():
+            label = CAUSE_LABELS.get(cause, cause.replace("_"," ").title())
+            pct = cnt / len(df) * 100
+            st.markdown(f"`{label}` - **{cnt:,}** ({pct:.1f}%)")
+    with col_b:
+        st.markdown("**Busiest Corridors**")
+        corr_counts = df[df["corridor"] != "Non-corridor"]["corridor"].value_counts().head(6)
+        for corr, cnt in corr_counts.items():
+            st.markdown(f"`{corr}` - **{cnt:,}**")
+    with col_c:
+        st.markdown("**Zone Coverage**")
+        zone_counts = df[df["zone"] != "Unknown"]["zone"].value_counts().head(6)
+        for zone, cnt in zone_counts.items():
+            st.markdown(f"`{zone}` - **{cnt:,}**")
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PAGE 1 - EDA & INSIGHTS
+# ═══════════════════════════════════════════════════════════════════
+elif page == "📊 EDA & Insights":
+    st.markdown("# 📊 Exploratory Data Analysis")
+    st.markdown("*Dataset: 8,173 Bengaluru traffic events · Nov 2023 - Apr 2024*")
+    st.markdown("---")
+
+    tab1, tab2, tab3, tab4 = st.tabs(["Distribution", "Temporal", "Spatial", "Operational"])
+
+    with tab1:
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("#### Event Cause Distribution")
+            img = os.path.join(ASSETS, "eda_cause_dist.png")
+            if os.path.exists(img): st.image(img, use_container_width=True)
+            st.caption("Vehicle breakdowns dominate (60%). High-impact causes - accidents, construction, events - form a critical minority requiring elevated response.")
+        with c2:
+            st.markdown("#### Cause x Impact Tier Heatmap")
+            img = os.path.join(ASSETS, "eda_heatmap.png")
+            if os.path.exists(img): st.image(img, use_container_width=True)
+            st.caption("Accidents, construction and public events show the highest High-impact concentration. Vehicle breakdowns generate volume but are mostly Medium due to corridor assignment.")
+
+        st.markdown("#### Impact Tier Distribution")
+        img = os.path.join(ASSETS, "eda_impact_dist.png")
+        if os.path.exists(img): st.image(img, use_container_width=True)
+
+    with tab2:
+        st.markdown("#### Monthly Event Volume Trend")
+        img = os.path.join(ASSETS, "eda_monthly_trend.png")
+        if os.path.exists(img): st.image(img, use_container_width=True)
+        st.caption("March 2024 saw the highest event volume (1,929). Planned events peak in construction season (Nov-Mar).")
+
+        st.markdown("#### Hourly Distribution (IST)")
+        img = os.path.join(ASSETS, "eda_hourly.png")
+        if os.path.exists(img): st.image(img, use_container_width=True)
+        st.caption("High overnight reporting (0-5 AM) reflects patrol-officer logging of overnight incidents at shift start. True operational peaks align with morning (7-10 AM) and evening (5-9 PM) commute windows.")
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown("**Day-of-Week Distribution**")
+            df["dow"] = df["start_local"].dt.day_name()
+            dow_counts = df["dow"].value_counts().reindex(
+                ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"], fill_value=0
+            )
+            fig, ax = plt.subplots(figsize=(7, 3), facecolor='#0F1729')
+            ax.set_facecolor('#1E2D4E')
+            bars = ax.bar(dow_counts.index, dow_counts.values,
+                          color=['#EF4444' if d in ['Saturday','Sunday'] else '#3B82F6' for d in dow_counts.index],
+                          edgecolor='none', alpha=0.9)
+            ax.set_xticklabels(dow_counts.index, rotation=30, ha='right', color='#E2E8F0', fontsize=8)
+            ax.tick_params(colors='#E2E8F0')
+            ax.spines[['top','right']].set_visible(False)
+            ax.spines[['left','bottom']].set_color('#2D4070')
+            ax.set_facecolor('#1E2D4E')
+            ax.yaxis.label.set_color('#E2E8F0')
+            ax.grid(axis='y', color='#2D4070', alpha=0.4)
+            plt.tight_layout()
+            st.pyplot(fig)
+        with col_b:
+            st.markdown("**Event Resolution Time**")
+            img = os.path.join(ASSETS, "eda_duration.png")
+            if os.path.exists(img): st.image(img, use_container_width=True)
+
+    with tab3:
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("#### Top Corridors by Volume")
+            img = os.path.join(ASSETS, "eda_corridors.png")
+            if os.path.exists(img): st.image(img, use_container_width=True)
+            st.caption("Mysore Road leads with 743 events. All named corridors are classified High priority - a key signal in ASTER's scoring.")
+        with c2:
+            st.markdown("#### Zone-Wise Event Density")
+            img = os.path.join(ASSETS, "eda_zones.png")
+            if os.path.exists(img): st.image(img, use_container_width=True)
+            st.caption("Central Zone 2 (MG Road, Brigade area) and West Zone 1 (Mysore Road corridor) show the highest combined event density.")
+
+        st.markdown("#### Hotspot Police Stations (top 15)")
+        ps_agg = df.groupby("police_station").agg(
+            total=("id", "count"),
+            high_impact=("impact_tier", lambda x: (x == "High").sum()),
+            road_closures=("road_closure_flag", "sum"),
+        ).sort_values("total", ascending=False).head(15)
+        ps_agg["high_%"] = (ps_agg["high_impact"] / ps_agg["total"] * 100).round(1)
+        st.dataframe(
+            ps_agg.reset_index().rename(columns={
+                "police_station": "Police Station",
+                "total": "Total Events",
+                "high_impact": "High Impact",
+                "road_closures": "Road Closures",
+                "high_%": "High Impact %",
+            }),
+            use_container_width=True, hide_index=True
+        )
+
+    with tab4:
+        st.markdown("#### Key Operational Findings")
+        findings = [
+            ("🔴 Corridor = Priority", "Named corridors are *always* High priority. Non-corridor roads are Low. This single feature drives 40%+ of model importance."),
+            ("🚗 Vehicle Breakdowns Dominate", "60% of all events are vehicle breakdowns. BMTC buses (47.8 min median) and trucks (44.6 min) resolve slowest - critical for diversion planning."),
+            ("⏰ Overnight Logging Spike", "0-5 AM shows high event volume - patrol officers log overnight incidents at shift start. Real-time triage must account for timestamp lag."),
+            ("🌧️ Water Logging Clusters", "Water logging events cluster on ORR (East/North) during monsoon months. Predictive pre-positioning is viable."),
+            ("🎭 Planned Events Are Underreported", "Only 6% of events are marked 'planned'. Construction, VIP movement, and public events in practice need more lead-time classification."),
+            ("⚡ Accidents Close Fastest", "Despite high disruption, accidents resolve in ~40 min median - emergency response protocols work. Congestion events linger longest."),
+        ]
+        col1, col2 = st.columns(2)
+        for i, (title, body) in enumerate(findings):
+            col = col1 if i % 2 == 0 else col2
+            with col:
+                st.markdown(f'<div class="card"><strong>{title}</strong><br><small>{body}</small></div>',
+                            unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PAGE 2 - PREDICT & RESPOND
+# ═══════════════════════════════════════════════════════════════════
+elif page == "🔮 Predict & Respond":
+    st.markdown("# 🔮 Event Triage & Response Planner")
+    st.markdown("*Enter an event - get an instant impact prediction and full operational response plan.*")
+    st.markdown("---")
+
+    col_form, col_result = st.columns([4, 5], gap="large")
+
+    with col_form:
+        st.markdown("### 📋 Event Details")
+
+        with st.expander("▸ Event Classification", expanded=True):
+            event_type = st.selectbox("Event Type", ["unplanned", "planned"],
+                                       format_func=lambda x: x.title())
+            cause_key  = st.selectbox("Root Cause", list(CAUSE_LABELS.keys()),
+                                       format_func=lambda x: CAUSE_LABELS[x])
+            priority   = st.radio("Operational Priority", ["High", "Low"], horizontal=True)
+            road_closure = st.checkbox("Requires Road Closure")
+
+        with st.expander("▸ Location & Corridor", expanded=True):
+            corridor = st.selectbox("Corridor", CORRIDORS)
+            zone     = st.selectbox("Zone", ZONES)
+            lat      = st.number_input("Latitude",  value=12.97, min_value=12.7, max_value=13.3, step=0.001, format="%.4f")
+            lon      = st.number_input("Longitude", value=77.59, min_value=77.3, max_value=77.9, step=0.001, format="%.4f")
+
+        with st.expander("▸ Time & Vehicle", expanded=True):
+            event_hour = st.slider("Hour of Day (IST)", 0, 23, 8,
+                                   help="0 = midnight, 8 = 8 AM, 17 = 5 PM")
+            veh_type   = st.selectbox("Vehicle Type (if applicable)", [
+                "unknown", "heavy_vehicle", "bmtc_bus", "ksrtc_bus",
+                "private_bus", "lcv", "truck", "private_car", "taxi", "auto", "others"
+            ])
+
+        # Quick scenario presets
+        st.markdown("#### ⚡ Quick Scenarios")
+        qcols = st.columns(3)
+        preset_event = {}
+        if qcols[0].button("🚌 Bus Breakdown\nMysore Road 8 AM"):
+            preset_event = {"event_type":"unplanned","event_cause":"vehicle_breakdown",
+                            "priority":"High","requires_road_closure":False,
+                            "corridor":"Mysore Road","zone":"South Zone 2",
+                            "latitude":12.97,"longitude":77.56,"hour":8,"veh_type":"bmtc_bus"}
+        if qcols[1].button("🎤 Public Event\nCubbon Park 6 PM"):
+            preset_event = {"event_type":"planned","event_cause":"public_event",
+                            "priority":"High","requires_road_closure":True,
+                            "corridor":"CBD 2","zone":"Central Zone 1",
+                            "latitude":12.976,"longitude":77.593,"hour":18,"veh_type":"unknown"}
+        if qcols[2].button("💧 Water Logging\nORR East 9 AM"):
+            preset_event = {"event_type":"unplanned","event_cause":"water_logging",
+                            "priority":"High","requires_road_closure":False,
+                            "corridor":"ORR East 2","zone":"East Zone 2",
+                            "latitude":12.935,"longitude":77.696,"hour":9,"veh_type":"unknown"}
+
+        if preset_event:
+            st.session_state["preset"] = preset_event
+            st.rerun()
+
+        if "preset" in st.session_state:
+            p = st.session_state["preset"]
+            event_type   = p.get("event_type", event_type)
+            cause_key    = p.get("event_cause", cause_key)
+            priority     = p.get("priority", priority)
+            road_closure = p.get("requires_road_closure", road_closure)
+            corridor     = p.get("corridor", corridor)
+            zone         = p.get("zone", zone)
+            lat          = p.get("latitude", lat)
+            lon          = p.get("longitude", lon)
+            event_hour   = p.get("hour", event_hour)
+            veh_type     = p.get("veh_type", veh_type)
+            del st.session_state["preset"]
+
+        predict_btn = st.button("🚀  Analyse Event & Generate Response Plan", use_container_width=True)
+
+    # ── Right panel - results ─────────────────────────────────────
+    with col_result:
+        if predict_btn:
+            now_utc = pd.Timestamp.now(tz="UTC").replace(
+                hour=max(0, event_hour - 5), minute=30
+            )
+
+            event_dict = {
+                "event_type": event_type,
+                "event_cause": cause_key,
+                "requires_road_closure": road_closure,
+                "priority": priority,
+                "corridor": corridor,
+                "zone": zone,
+                "latitude": lat,
+                "longitude": lon,
+                "veh_type": veh_type,
+                "police_station": "Unknown",
+                "start_datetime": now_utc,
+            }
+
+            with st.spinner("Running ASTER impact model…"):
+                pred_tier, prob_dict, confidence = predict_event(event_dict, gb, enc, le, fnames)
+                raw_score = compute_raw_impact_score(event_dict)
+                plan = generate_response_plan(
+                    predicted_tier=pred_tier,
+                    confidence=confidence,
+                    impact_score=raw_score,
+                    event_cause=cause_key,
+                    corridor=corridor,
+                    zone=zone,
+                    junction=None,
+                    hour=event_hour,
+                    requires_road_closure=road_closure,
+                )
+                plan_d = plan_to_dict(plan)
+
+            eff_tier = plan_d["effective_tier"]
+            badge_cls = TIER_BADGE_CLASS[eff_tier]
+            card_cls  = TIER_CARD_CLASS[eff_tier]
+
+            # ── Impact prediction card ──────────────────────────
+            tier_icon = {"Low": "🟢", "Medium": "🟡", "High": "🔴"}[eff_tier]
+            st.markdown(
+                f'<div class="card {card_cls}">'
+                f'<p class="section-title">Impact Prediction</p>'
+                f'<div style="font-size:2rem; font-weight:800; color:{TIER_COLORS[eff_tier]}">'
+                f'{tier_icon} {eff_tier.upper()} IMPACT</div>'
+                f'<div style="color:#94A3B8; font-size:0.9rem; margin-top:4px">'
+                f'Model confidence: <strong style="color:#E2E8F0">{confidence*100:.1f}%</strong>'
+                f' &nbsp;|&nbsp; Impact score: <strong style="color:#E2E8F0">{raw_score}/6</strong>'
+                f'</div></div>',
+                unsafe_allow_html=True
+            )
+
+            if plan_d["effective_tier"] != plan_d["predicted_tier"]:
+                st.warning(
+                    f"⬆️ **Escalated** from {plan_d['predicted_tier']} -> {plan_d['effective_tier']}  "
+                    f"because: {'; '.join(plan_d['escalation_triggers'])}"
+                )
+
+            # ── Probability bars ────────────────────────────────
+            st.markdown("**Probability Distribution**")
+            for tier_lbl in ["Low", "Medium", "High"]:
+                p_val = prob_dict.get(tier_lbl, 0)
+                bar_w = int(p_val * 100)
+                col_bar = TIER_COLORS[tier_lbl]
+                st.markdown(
+                    f'<div style="display:flex; align-items:center; margin:3px 0">'
+                    f'<div style="width:70px; color:#94A3B8; font-size:0.8rem">{tier_lbl}</div>'
+                    f'<div style="flex:1; background:#0D1B2E; border-radius:4px; height:16px">'
+                    f'<div style="width:{bar_w}%; background:{col_bar}; border-radius:4px; height:16px; opacity:0.85"></div></div>'
+                    f'<div style="width:55px; text-align:right; color:#E2E8F0; font-size:0.85rem; font-weight:600">{p_val*100:.1f}%</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+            st.markdown("---")
+
+            # ── Response plan ───────────────────────────────────
+            st.markdown("### 🗂️ Operational Response Plan")
+
+            r1, r2, r3, r4 = st.columns(4)
+            r1.metric("Response Priority", plan_d["response_priority"])
+            r2.metric("Officers Required", f"{plan_d['manpower_min']}-{plan_d['manpower_max']}")
+            r3.metric("Deploy Within",     plan_d["deployment_time"])
+            r4.metric("Diversion",         "Yes" if "Mandatory" in plan_d["diversion_urgency"] else
+                                            "Advisory" if "Advisory" in plan_d["diversion_urgency"] else "No")
+
+            st.markdown("**Barricading:** " + plan_d["barricading"])
+            st.markdown("**Diversion:** " + plan_d["diversion_urgency"])
+            st.markdown(f'*{plan_d["risk_reasoning"]}*')
+
+            # ── Action checklist ────────────────────────────────
+            st.markdown("#### ✅ Action Checklist")
+            for i, item in enumerate(plan_d["action_items"], 1):
+                st.markdown(
+                    f'<div class="action-item">☐ &nbsp;{item}</div>',
+                    unsafe_allow_html=True
+                )
+
+        else:
+            st.markdown(
+                '<div class="card" style="text-align:center; padding:60px 20px">'
+                '<div style="font-size:3rem">🚦</div>'
+                '<div style="color:#93C5FD; font-size:1.1rem; margin-top:16px">Fill in event details and click <br><strong>Analyse Event</strong> to get the response plan.</div>'
+                '</div>',
+                unsafe_allow_html=True
+            )
+            st.markdown(
+                '<div class="card">'
+                '<p class="section-title">What you\'ll get</p>'
+                '<div class="action-item">🎯 &nbsp;Predicted impact tier (Low / Medium / High)</div>'
+                '<div class="action-item">📊 &nbsp;Probability distribution across all tiers</div>'
+                '<div class="action-item">👮 &nbsp;Officer count recommendation</div>'
+                '<div class="action-item">🚧 &nbsp;Barricading intensity</div>'
+                '<div class="action-item">🔀 &nbsp;Diversion urgency</div>'
+                '<div class="action-item">⏱️ &nbsp;Target deployment time</div>'
+                '<div class="action-item">✅ &nbsp;Actionable step-by-step checklist</div>'
+                '</div>',
+                unsafe_allow_html=True
+            )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PAGE 3 - MODEL PERFORMANCE
+# ═══════════════════════════════════════════════════════════════════
+elif page == "📈 Model Performance":
+    st.markdown("# 📈 Model Performance & Explainability")
+    st.markdown("---")
+
+    gb_m = metrics.get("gradient_boosting", {})
+    rf_m = metrics.get("random_forest", {})
+
+    st.markdown("### Model Comparison")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("GB Accuracy",   f"{gb_m.get('accuracy', 0)*100:.2f}%")
+    col2.metric("GB F1 (macro)", f"{gb_m.get('f1_macro', 0)*100:.2f}%")
+    col3.metric("GB AUC-ROC",    f"{gb_m.get('auc_roc', 0):.4f}")
+    col4.metric("5-Fold CV F1",  f"{gb_m.get('cv_f1_mean', 0)*100:.2f}% ± {gb_m.get('cv_f1_std', 0)*100:.2f}%")
+
+    st.markdown("---")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown("#### Confusion Matrix - Gradient Boosting")
+        img = os.path.join(ASSETS, "confusion_matrix.png")
+        if os.path.exists(img):
+            st.image(img, use_container_width=True)
+            st.caption("Near-perfect separation across all three tiers.")
+    with col_b:
+        st.markdown("#### Top Feature Importances")
+        img = os.path.join(ASSETS, "feature_importance.png")
+        if os.path.exists(img):
+            st.image(img, use_container_width=True)
+
+    st.markdown("#### Baseline vs Main Model")
+    comp_df = pd.DataFrame({
+        "Model": ["Random Forest (Baseline)", "Gradient Boosting (Main)"],
+        "Accuracy": [f"{rf_m.get('accuracy',0)*100:.2f}%",
+                     f"{gb_m.get('accuracy',0)*100:.2f}%"],
+        "F1 Macro": [f"{rf_m.get('f1_macro',0)*100:.2f}%",
+                     f"{gb_m.get('f1_macro',0)*100:.2f}%"],
+        "F1 Weighted": [f"{rf_m.get('f1_weighted',0)*100:.2f}%",
+                        f"{gb_m.get('f1_weighted',0)*100:.2f}%"],
+        "AUC-ROC": [f"{rf_m.get('auc_roc',0):.4f}",
+                    f"{gb_m.get('auc_roc',0):.4f}"],
+    })
+    st.dataframe(comp_df, use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+    st.markdown("### 🔍 Target Engineering - Transparency Note")
+    st.markdown("""
+ASTER's **impact_tier** target variable is derived from four operational signals:
+| Signal | Logic | Points |
+|--------|-------|--------|
+| `requires_road_closure` | True -> congestion confirmed | +2 |
+| `priority` | High (named corridor) | +1 |
+| `event_cause` | Accident/Construction/Event/Protest | +1 |
+| `corridor` | Named major corridor | +1 |
+
+**Tiers:** 1-2 = Low · 3 = Medium · 4-6 = High
+
+The high model accuracy reflects that the Gradient Boosting model learns this
+operational scoring rule precisely - and can correctly predict it for new events
+using only the input features available at the time of reporting.
+In production, the tier labels should be validated with BTP officer ground-truth
+assessments to refine the scoring weights. This is an explicit assumption, not hidden.
+    """)
+
+    st.markdown("### 📋 Full Classification Report - Gradient Boosting")
+    report_text = gb_m.get("report", "Not available")
+    st.code(report_text, language=None)
+
+    st.markdown("### ⚖️ Assumptions & Limitations")
+    st.markdown("""
+- **Data period:** Nov 2023 - Apr 2024 only. Monsoon season (June-Sept) not fully represented.
+- **Labels are derived, not ground-truth:** Impact tier is computed from operational features, not validated by officer assessment. Future work should include human-annotated severity labels.
+- **No real-time signal integration:** ASTER currently uses event metadata; production would benefit from live GPS feeds, signal timing data, and weather APIs.
+- **Overnight logging spike:** 0-5 AM event volume reflects officer logging habits, not actual midnight incidents. Timestamp normalisation is required in production.
+- **Spatial coverage:** Events are within Bengaluru city limits. BMRDA peripheral zones have sparse coverage.
+    """)

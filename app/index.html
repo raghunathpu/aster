@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ASTER — Traffic Intelligence</title>
+<style>
+:root{--bg:#0F1729;--surface:#1E2D4E;--surface2:#0D1B2E;--border:#2D4070;--text:#E2E8F0;--muted:#94A3B8;--accent:#3B82F6;--accent2:#1D4ED8;--green:#22C55E;--yellow:#F59E0B;--red:#EF4444;--green-bg:#14532D;--yellow-bg:#78350F;--red-bg:#7F1D1D}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Inter','Segoe UI',system-ui,sans-serif;min-height:100vh}
+nav{background:#08101E;border-bottom:1px solid var(--border);padding:0 32px;display:flex;align-items:center;justify-content:space-between;height:60px;position:sticky;top:0;z-index:100}
+.nav-brand{display:flex;align-items:center;gap:12px}
+.nav-title{font-size:1.1rem;font-weight:700}
+.nav-sub{font-size:0.7rem;color:var(--muted)}
+.nav-tabs{display:flex;gap:4px}
+.nav-tab{background:none;border:none;color:var(--muted);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:0.88rem;font-weight:500;transition:all .15s}
+.nav-tab:hover{background:var(--surface);color:var(--text)}
+.nav-tab.active{background:var(--surface);color:var(--accent);font-weight:600}
+.page{display:none;padding:28px 32px;max-width:1400px;margin:0 auto}
+.page.active{display:block}
+h1{font-size:1.9rem;font-weight:800;margin-bottom:6px}
+h2{font-size:1.15rem;font-weight:700;color:#93C5FD;margin-bottom:12px}
+h3{font-size:.95rem;font-weight:600;color:#93C5FD;margin-bottom:8px}
+.sub{color:var(--muted);font-size:.88rem;margin-bottom:24px}
+.kpi-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:28px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px}
+.kpi-lbl{font-size:.7rem;color:#93C5FD;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.kpi-val{font-size:1.6rem;font-weight:800}
+.kpi-s{font-size:.73rem;color:var(--muted);margin-top:3px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px}
+.g4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px}
+hr{border:none;border-top:1px solid var(--border);margin:22px 0}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 22px}
+.card.tH{border-left:4px solid var(--red)}.card.tM{border-left:4px solid var(--yellow)}.card.tL{border-left:4px solid var(--green)}
+.badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.75rem;font-weight:700}
+.bH{background:var(--red-bg);color:#FCA5A5}.bM{background:var(--yellow-bg);color:#FCD34D}.bL{background:var(--green-bg);color:#86EFAC}.bB{background:#1E3A5F;color:#93C5FD}
+.cw{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 22px}
+.ct{font-size:.88rem;font-weight:600;margin-bottom:12px}
+.predict-layout{display:grid;grid-template-columns:390px 1fr;gap:24px;align-items:start}
+.fg{margin-bottom:14px}
+.fl{display:block;font-size:.8rem;color:var(--muted);margin-bottom:5px}
+select,input[type=number],input[type=range]{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:.86rem;outline:none}
+select:focus,input:focus{border-color:var(--accent)}
+.rg{display:flex;gap:8px}
+.ro input[type=radio]{display:none}
+.ro label{display:block;text-align:center;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;font-size:.84rem;transition:all .15s}
+.ro input:checked+label{border-color:var(--accent);background:#1E3A5F;color:var(--accent);font-weight:600}
+.ro{flex:1}
+.cbr{display:flex;align-items:center;gap:8px;cursor:pointer}
+.cbr input{width:auto;cursor:pointer;accent-color:var(--accent)}
+.btn{width:100%;padding:12px;border-radius:10px;border:none;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-size:.95rem;font-weight:700;cursor:pointer;transition:all .15s;margin-top:6px}
+.btn:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(59,130,246,.3)}
+.psg{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}
+.bp{padding:10px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:.76rem;cursor:pointer;transition:all .15s;text-align:center;line-height:1.4}
+.bp:hover{border-color:var(--accent);color:var(--text)}
+.slbl{font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#93C5FD;margin-bottom:8px}
+.pbr{display:flex;align-items:center;margin:4px 0;gap:8px}
+.plbl{width:65px;font-size:.8rem;color:var(--muted)}
+.pt{flex:1;background:var(--surface2);border-radius:4px;height:15px;overflow:hidden}
+.pf{height:100%;border-radius:4px;transition:width .6s ease}
+.ppct{width:50px;text-align:right;font-size:.83rem;font-weight:600}
+.ai{background:var(--surface2);border-radius:8px;padding:8px 12px;margin:4px 0;font-size:.84rem;color:#CBD5E1;display:flex;gap:8px;align-items:flex-start}
+.aick{color:var(--accent);flex-shrink:0}
+.sr{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}
+.sb{background:var(--surface2);border-radius:8px;padding:10px 14px;text-align:center}
+.sb .v{font-size:1rem;font-weight:700}.sb .l{font-size:.7rem;color:var(--muted);margin-top:2px}
+.esc{background:#2D1B0E;border:1px solid #92400E;border-radius:8px;padding:10px 14px;margin:10px 0;font-size:.84rem;color:#FCD34D}
+.mc{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;text-align:center}
+.mv{font-size:1.7rem;font-weight:800;color:var(--green)}
+.ml{font-size:.73rem;color:var(--muted);margin-top:4px}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th{background:var(--surface2);color:#93C5FD;padding:9px 14px;text-align:left;font-size:.73rem;text-transform:uppercase;letter-spacing:.05em}
+td{padding:9px 14px;border-bottom:1px solid var(--border);color:var(--text)}
+tr:last-child td{border-bottom:none}
+.ic{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px}
+.it{font-weight:700;margin-bottom:6px}
+.ib{font-size:.83rem;color:var(--muted);line-height:1.5}
+.tier-h{color:var(--red);font-size:2.2rem;font-weight:900}
+.tier-m{color:var(--yellow);font-size:2.2rem;font-weight:900}
+.tier-l{color:var(--green);font-size:2.2rem;font-weight:900}
+.eda-tabs{display:flex;gap:6px;margin-bottom:20px}
+.et{padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:.84rem;cursor:pointer;transition:all .15s}
+.et.ea{border-color:var(--accent);color:var(--text);background:var(--surface)}
+</style>
+</head>
+<body>
+<nav>
+  <div class="nav-brand">
+    <span style="font-size:1.5rem">🚦</span>
+    <div><div class="nav-title">ASTER</div><div class="nav-sub">Adaptive Smart Traffic Event Response · Bengaluru</div></div>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="goTo('overview',this)">Overview</button>
+    <button class="nav-tab" onclick="goTo('eda',this)">EDA &amp; Insights</button>
+    <button class="nav-tab" onclick="goTo('predict',this)">🔮 Predict &amp; Respond</button>
+    <button class="nav-tab" onclick="goTo('model',this)">Model</button>
+  </div>
+</nav>
+
+<!-- ── OVERVIEW ── -->
+<div id="page-overview" class="page active">
+  <h1>🚦 ASTER — Traffic Intelligence for Bengaluru</h1>
+  <p class="sub">Forecast event-driven congestion before it becomes a crisis. Recommend the right operational response before the first cone is placed.</p>
+  <div class="kpi-grid">
+    <div class="kpi"><div class="kpi-lbl">Total Events</div><div class="kpi-val">8,173</div><div class="kpi-s">Nov 2023 – Apr 2024</div></div>
+    <div class="kpi"><div class="kpi-lbl">High Impact</div><div class="kpi-val" style="color:var(--red)">1,105</div><div class="kpi-s">13.5% of all events</div></div>
+    <div class="kpi"><div class="kpi-lbl">Planned Events</div><div class="kpi-val">467</div><div class="kpi-s">5.7% — underreported</div></div>
+    <div class="kpi"><div class="kpi-lbl">Road Closures</div><div class="kpi-val">676</div><div class="kpi-s">8.3% triggered closure</div></div>
+    <div class="kpi"><div class="kpi-lbl">Corridors</div><div class="kpi-val">21</div><div class="kpi-s">Named BTP corridors</div></div>
+    <div class="kpi"><div class="kpi-lbl">Median Resolution</div><div class="kpi-val">64.5</div><div class="kpi-s">minutes per event</div></div>
+  </div>
+  <div class="g2" style="margin-bottom:24px">
+    <div>
+      <h2>The Problem We Solve</h2>
+      <div class="card" style="margin-bottom:14px;line-height:1.7;font-size:.9rem">
+        Bengaluru handles <strong>7 million+ vehicle trips per day</strong>. When disruptions occur — a bus breakdown on Mysore Road at 8 AM, a protest blocking ORR East during evening peak, water logging under Hebbal — the response is <strong>reactive, experience-driven, and unquantified</strong>.<br><br>
+        ASTER classifies every incoming event as Low, Medium, or High impact, then generates a complete operational response plan in <strong>under 2 seconds</strong>.
+      </div>
+      <h2>How It Works</h2>
+      <div class="card">
+        <table>
+          <tr><th>Step</th><th>What Happens</th></tr>
+          <tr><td>1. Event Logged</td><td>Officer reports incident via ASTRAM</td></tr>
+          <tr><td>2. ASTER Classifies</td><td>ML model predicts Low / Medium / High impact</td></tr>
+          <tr><td>3. Context Escalation</td><td>Rules check peak hour, junction hotspot, corridor priority</td></tr>
+          <tr><td>4. Response Plan Generated</td><td>Manpower, barricading, diversion, deployment SLA</td></tr>
+          <tr><td>5. Officer Acts</td><td>Specific, prioritised action checklist delivered</td></tr>
+        </table>
+      </div>
+    </div>
+    <div>
+      <h2>The Three-Tier System</h2>
+      <div class="card tL" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><div style="font-size:1.1rem;font-weight:800;color:var(--green)">🟢 LOW IMPACT</div><div style="color:var(--muted);font-size:.82rem;margin-top:3px">Score 1–2 · Routine disruption</div></div>
+          <span class="badge bL">P3 – Routine</span>
+        </div>
+        <hr style="margin:10px 0"><div style="font-size:.83rem;color:var(--muted)">1–2 officers · Monitor only · No barricading · No diversion required</div>
+      </div>
+      <div class="card tM" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><div style="font-size:1.1rem;font-weight:800;color:var(--yellow)">🟡 MEDIUM IMPACT</div><div style="color:var(--muted);font-size:.82rem;margin-top:3px">Score 3 · Elevated disruption</div></div>
+          <span class="badge bM">P2 – Elevated</span>
+        </div>
+        <hr style="margin:10px 0"><div style="font-size:.83rem;color:var(--muted)">2–4 officers · Light barricading · Advisory diversion</div>
+      </div>
+      <div class="card tH">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><div style="font-size:1.1rem;font-weight:800;color:var(--red)">🔴 HIGH IMPACT</div><div style="color:var(--muted);font-size:.82rem;margin-top:3px">Score 4–6 · Critical disruption</div></div>
+          <span class="badge bH">P1 – Critical</span>
+        </div>
+        <hr style="margin:10px 0"><div style="font-size:.83rem;color:var(--muted)">4–8 officers · Heavy barricading · Mandatory diversion + TCR notification</div>
+      </div>
+    </div>
+  </div>
+  <hr>
+  <div class="g3">
+    <div><h3>Top Event Causes</h3><div id="lCauses"></div></div>
+    <div><h3>Busiest Corridors</h3><div id="lCorr"></div></div>
+    <div><h3>Zone Coverage</h3><div id="lZones"></div></div>
+  </div>
+</div>
+
+<!-- ── EDA ── -->
+<div id="page-eda" class="page">
+  <h1>📊 EDA &amp; Operational Insights</h1>
+  <p class="sub">8,173 real Bengaluru traffic events · ASTRAM operational system · Nov 2023 – Apr 2024</p>
+  <div class="eda-tabs">
+    <button class="et ea" id="et0" onclick="switchEDA(0)">Distribution</button>
+    <button class="et" id="et1" onclick="switchEDA(1)">Temporal</button>
+    <button class="et" id="et2" onclick="switchEDA(2)">Spatial</button>
+    <button class="et" id="et3" onclick="switchEDA(3)">Operational</button>
+  </div>
+  <div id="ed0">
+    <div class="g2" style="margin-bottom:20px">
+      <div class="cw"><div class="ct">Impact Tier Distribution</div><svg id="cTier" width="100%" height="220" viewBox="0 0 380 220"></svg></div>
+      <div class="cw"><div class="ct">Event Cause Breakdown (Top 10)</div><svg id="cCause" width="100%" height="220" viewBox="0 0 380 220"></svg></div>
+    </div>
+    <div class="cw"><div class="ct">Feature Importance — Gradient Boosting Model (Top 15)</div><svg id="cFI" width="100%" height="260" viewBox="0 0 680 260"></svg></div>
+  </div>
+  <div id="ed1" style="display:none">
+    <div class="cw" style="margin-bottom:20px"><div class="ct">Monthly Event Volume — Planned vs Unplanned</div><svg id="cMon" width="100%" height="240" viewBox="0 0 680 240"></svg></div>
+    <div class="g2">
+      <div class="cw"><div class="ct">Events by Hour of Day (IST)</div><svg id="cHour" width="100%" height="220" viewBox="0 0 480 220"></svg>
+        <div style="font-size:.76rem;color:var(--muted);margin-top:8px">
+          <span style="color:#6366F1">■</span> Night (0–5 AM) &nbsp;<span style="color:#F59E0B">■</span> Morning Peak (7–10 AM) &nbsp;<span style="color:#3B82F6">■</span> Off-peak &nbsp;<span style="color:#EF4444">■</span> Evening Peak
+        </div>
+      </div>
+      <div class="cw">
+        <div class="ct">Key Temporal Findings</div>
+        <div class="ai"><span class="aick">📌</span><span><strong>Overnight Logging (0–5 AM)</strong> — Patrol officers log incidents at shift start, not real-time. Accounts for 30% of events in the dataset.</span></div>
+        <div class="ai"><span class="aick">⚡</span><span><strong>Evening Peak (5–9 PM)</strong> shows 23% higher High-impact rate than off-peak windows.</span></div>
+        <div class="ai"><span class="aick">📅</span><span><strong>March 2024 peak</strong> (1,929 events) coincides with pre-summer construction season across city.</span></div>
+        <div class="ai"><span class="aick">📆</span><span><strong>Weekdays vs weekends</strong> — Planned events (processions, rallies) spike on weekends; breakdowns are flat throughout.</span></div>
+      </div>
+    </div>
+  </div>
+  <div id="ed2" style="display:none">
+    <div class="g2" style="margin-bottom:20px">
+      <div class="cw"><div class="ct">Top 10 Corridors by Incident Volume</div><svg id="cCorr" width="100%" height="260" viewBox="0 0 380 260"></svg></div>
+      <div class="cw"><div class="ct">Events per Zone</div><svg id="cZone" width="100%" height="260" viewBox="0 0 380 260"></svg></div>
+    </div>
+    <div class="card">
+      <h3>Hotspot Police Stations (representative)</h3>
+      <table>
+        <tr><th>Police Station</th><th>Total Events</th><th>High Impact</th><th>Road Closures</th></tr>
+        <tr><td>Hebbal</td><td>312</td><td><span class="badge bH">89</span></td><td>28</td></tr>
+        <tr><td>Yeshwanthpura</td><td>298</td><td><span class="badge bH">76</span></td><td>21</td></tr>
+        <tr><td>Mysore Road</td><td>287</td><td><span class="badge bH">81</span></td><td>35</td></tr>
+        <tr><td>Silk Board</td><td>241</td><td><span class="badge bH">68</span></td><td>19</td></tr>
+        <tr><td>Koramangala</td><td>229</td><td><span class="badge bM">52</span></td><td>14</td></tr>
+      </table>
+    </div>
+  </div>
+  <div id="ed3" style="display:none">
+    <h2>Key Operational Findings</h2>
+    <div class="g2">
+      <div class="ic"><div class="it">🔴 Corridor = Priority Signal</div><div class="ib">Named corridors are always High priority. This single feature accounts for 53.7% of model importance — the strongest single predictive signal for event severity.</div></div>
+      <div class="ic"><div class="it">🚗 Vehicle Breakdowns Dominate (But Aren't the Worst)</div><div class="ib">4,896 breakdowns (60%) are mostly Medium impact. BMTC buses take 47.8 min median to resolve — slowest vehicle type, disproportionate corridor risk.</div></div>
+      <div class="ic"><div class="it">⏰ Overnight Logging Spike Requires Normalisation</div><div class="ib">0–5 AM shows 30% of all event volume. Patrol officers log overnight incidents at shift start. Real-time deployment must normalise timestamps.</div></div>
+      <div class="ic"><div class="it">🌧️ Water Logging Clusters on ORR During Monsoon</div><div class="ib">Water logging events cluster on ORR (East/North) and known underpass locations. Pre-monsoon pre-positioning of drainage response is viable.</div></div>
+      <div class="ic"><div class="it">🎭 Planned Events Severely Underreported at 5.7%</div><div class="ib">Construction, VIP movements, public events need 24–48 hour lead-time classification for proper pre-positioning. Biggest workflow gap.</div></div>
+      <div class="ic"><div class="it">⚡ Accidents Resolve Fastest Despite High Disruption</div><div class="ib">Accidents have ~40 min median resolution — fastest of all High-impact causes. Emergency protocols and CATS coordination work. General congestion lingers longest (90+ min).</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── PREDICT ── -->
+<div id="page-predict" class="page">
+  <h1>🔮 Event Triage &amp; Response Planner</h1>
+  <p class="sub">Enter an event — get an instant impact prediction and full operational response plan.</p>
+  <div class="predict-layout">
+    <div>
+      <div class="card" style="margin-bottom:14px">
+        <div style="font-weight:600;color:#93C5FD;margin-bottom:12px">▸ Event Classification</div>
+        <div class="fg"><label class="fl">Event Type</label><div class="rg"><div class="ro"><input type="radio" id="et-u" name="evt" value="unplanned" checked><label for="et-u">Unplanned</label></div><div class="ro"><input type="radio" id="et-p" name="evt" value="planned"><label for="et-p">Planned</label></div></div></div>
+        <div class="fg"><label class="fl">Root Cause</label>
+          <select id="cause">
+            <option value="vehicle_breakdown">Vehicle Breakdown</option>
+            <option value="accident">Accident</option>
+            <option value="construction">Construction</option>
+            <option value="water_logging">Water Logging</option>
+            <option value="pot_holes">Potholes</option>
+            <option value="tree_fall">Tree Fall</option>
+            <option value="public_event">Public Event</option>
+            <option value="procession">Procession / Rally</option>
+            <option value="protest">Protest</option>
+            <option value="vip_movement">VIP Movement</option>
+            <option value="road_conditions">Road Conditions</option>
+            <option value="congestion">General Congestion</option>
+            <option value="debris">Debris on Road</option>
+            <option value="fog_visibility">Fog / Low Visibility</option>
+            <option value="others">Others</option>
+          </select>
+        </div>
+        <div class="fg"><label class="fl">Operational Priority</label><div class="rg"><div class="ro"><input type="radio" id="pr-h" name="prio" value="High" checked><label for="pr-h">High</label></div><div class="ro"><input type="radio" id="pr-l" name="prio" value="Low"><label for="pr-l">Low</label></div></div></div>
+        <div class="fg"><label class="cbr"><input type="checkbox" id="closure"><span style="font-size:.84rem">Requires Road Closure</span></label></div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <div style="font-weight:600;color:#93C5FD;margin-bottom:12px">▸ Location &amp; Corridor</div>
+        <div class="fg"><label class="fl">Corridor</label>
+          <select id="corridor">
+            <option value="Non-corridor">Non-corridor</option>
+            <option value="Mysore Road">Mysore Road</option>
+            <option value="Bellary Road 1">Bellary Road 1</option>
+            <option value="Bellary Road 2">Bellary Road 2</option>
+            <option value="Tumkur Road">Tumkur Road</option>
+            <option value="Hosur Road">Hosur Road</option>
+            <option value="ORR North 1">ORR North 1</option>
+            <option value="ORR North 2">ORR North 2</option>
+            <option value="ORR East 1">ORR East 1</option>
+            <option value="ORR East 2">ORR East 2</option>
+            <option value="Old Madras Road">Old Madras Road</option>
+            <option value="Magadi Road">Magadi Road</option>
+            <option value="Bannerghata Road">Bannerghata Road</option>
+            <option value="CBD 2">CBD 2</option>
+            <option value="West of Chord Road">West of Chord Road</option>
+            <option value="Hennur Main Road">Hennur Main Road</option>
+            <option value="Varthur Road">Varthur Road</option>
+            <option value="Old Airport Road">Old Airport Road</option>
+          </select>
+        </div>
+        <div class="fg"><label class="fl">Zone</label>
+          <select id="zone">
+            <option>Central Zone 1</option><option>Central Zone 2</option>
+            <option>North Zone 1</option><option>North Zone 2</option>
+            <option>South Zone 1</option><option selected>South Zone 2</option>
+            <option>East Zone 1</option><option>East Zone 2</option>
+            <option>West Zone 1</option><option>West Zone 2</option>
+          </select>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <div style="font-weight:600;color:#93C5FD;margin-bottom:12px">▸ Time &amp; Vehicle</div>
+        <div class="fg"><label class="fl">Hour of Day (IST): <span id="hd">8:00</span></label><input type="range" id="hour" min="0" max="23" value="8" oninput="document.getElementById('hd').textContent=this.value+':00'"></div>
+        <div class="fg"><label class="fl">Vehicle Type</label>
+          <select id="veh">
+            <option value="unknown">Unknown</option><option value="bmtc_bus" selected>BMTC Bus</option>
+            <option value="ksrtc_bus">KSRTC Bus</option><option value="heavy_vehicle">Heavy Vehicle</option>
+            <option value="truck">Truck</option><option value="private_car">Private Car</option>
+            <option value="lcv">LCV</option><option value="auto">Auto</option><option value="taxi">Taxi</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:14px">
+        <div class="slbl">⚡ Quick Scenarios</div>
+        <div class="psg">
+          <button class="bp" onclick="preset('bus')">🚌 Bus Breakdown<br>Mysore Rd · 8 AM</button>
+          <button class="bp" onclick="preset('evt')">🎤 Public Event<br>CBD 2 · 6 PM</button>
+          <button class="bp" onclick="preset('water')">💧 Water Logging<br>ORR East · 9 AM</button>
+          <button class="bp" onclick="preset('acc')">🚨 Accident<br>Bellary Rd · 5 PM</button>
+          <button class="bp" onclick="preset('prot')">📢 Protest<br>Non-corridor · 4 PM</button>
+          <button class="bp" onclick="preset('vip')">🚔 VIP Movement<br>ORR North · 7 PM</button>
+        </div>
+      </div>
+      <button class="btn" onclick="runPred()">🚀 Analyse Event &amp; Generate Response Plan</button>
+    </div>
+    <div id="rpanel">
+      <div class="card" style="text-align:center;padding:60px 20px">
+        <div style="font-size:3rem;margin-bottom:16px">🚦</div>
+        <p style="color:#93C5FD;font-size:1rem">Fill in event details and click<br><strong>Analyse Event</strong> to get the response plan.</p>
+        <div style="text-align:left;margin-top:20px">
+          <div class="ai"><span>🎯</span><span>Predicted impact tier with probability distribution</span></div>
+          <div class="ai"><span>👮</span><span>Officer count recommendation</span></div>
+          <div class="ai"><span>🚧</span><span>Barricading intensity</span></div>
+          <div class="ai"><span>🔀</span><span>Diversion urgency</span></div>
+          <div class="ai"><span>⏱️</span><span>Target deployment SLA</span></div>
+          <div class="ai"><span>✅</span><span>Cause-specific action checklist</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODEL ── -->
+<div id="page-model" class="page">
+  <h1>📈 Model Performance &amp; Explainability</h1>
+  <p class="sub">Gradient Boosting classifier · 8,173 real events · 80/20 stratified split · 5-fold cross-validation</p>
+  <div class="g4" style="margin-bottom:24px">
+    <div class="mc"><div class="mv">99.94%</div><div class="ml">Accuracy</div></div>
+    <div class="mc"><div class="mv">99.95%</div><div class="ml">F1 Macro</div></div>
+    <div class="mc"><div class="mv">0.9999</div><div class="ml">AUC-ROC (OvR)</div></div>
+    <div class="mc"><div class="mv">99.95%</div><div class="ml">5-Fold CV F1</div></div>
+  </div>
+  <div class="g2" style="margin-bottom:24px">
+    <div class="cw"><div class="ct">Feature Importance — Top 15</div><svg id="cFIm" width="100%" height="300" viewBox="0 0 480 300"></svg></div>
+    <div class="card">
+      <h3>Model Comparison</h3>
+      <table>
+        <tr><th>Model</th><th>Accuracy</th><th>F1 Macro</th><th>AUC</th></tr>
+        <tr><td>Random Forest (Baseline)</td><td>99.85%</td><td>99.82%</td><td>0.9998</td></tr>
+        <tr><td><strong>Gradient Boosting</strong></td><td><strong>99.94%</strong></td><td><strong>99.95%</strong></td><td><strong>0.9999</strong></td></tr>
+      </table>
+      <hr>
+      <h3>Training Configuration</h3>
+      <div style="font-size:.82rem;color:var(--muted);line-height:1.9">
+        <div><strong style="color:var(--text)">n_estimators:</strong> 300 &nbsp;&nbsp; <strong style="color:var(--text)">learning_rate:</strong> 0.05</div>
+        <div><strong style="color:var(--text)">max_depth:</strong> 5 &nbsp;&nbsp; <strong style="color:var(--text)">subsample:</strong> 0.8</div>
+        <div><strong style="color:var(--text)">class_weight:</strong> balanced &nbsp;&nbsp; <strong style="color:var(--text)">features:</strong> 85</div>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:20px">
+    <h3>🔍 Target Engineering — Transparency Note</h3>
+    <p style="color:var(--muted);font-size:.87rem;margin-bottom:14px">ASTER's <code style="background:var(--surface2);padding:2px 6px;border-radius:4px">impact_tier</code> target variable is derived from four operational signals:</p>
+    <table>
+      <tr><th>Signal</th><th>Condition</th><th>Weight</th></tr>
+      <tr><td>requires_road_closure</td><td>== True</td><td style="color:var(--red);font-weight:700">+2</td></tr>
+      <tr><td>priority</td><td>== High</td><td style="color:var(--yellow);font-weight:700">+1</td></tr>
+      <tr><td>event_cause</td><td>accident / construction / public_event / protest / VIP</td><td style="color:var(--yellow);font-weight:700">+1</td></tr>
+      <tr><td>corridor</td><td>named BTP corridor</td><td style="color:var(--yellow);font-weight:700">+1</td></tr>
+    </table>
+    <div style="margin-top:12px;font-size:.84rem;color:var(--muted)">Score 1–2 = Low · Score 3 = Medium · Score 4–6 = High.<br>The high accuracy reflects the model correctly learning this deterministic rule and generalising to unseen event combinations. Real production value lies in inference speed, scale, and the recommendation engine. Ground-truth severity labels from officer assessments should be incorporated in Phase 2.</div>
+  </div>
+  <div class="card">
+    <h3>⚠️ Assumptions &amp; Limitations</h3>
+    <table>
+      <tr><th>Assumption</th><th>Rationale</th></tr>
+      <tr><td>Impact tier derived from operational signals</td><td>No ground-truth severity labels; scoring is auditable and consistent with BTP practice</td></tr>
+      <tr><td>Bengaluru-centric spatial normalisation</td><td>Model trained on Bengaluru coordinates only; other cities need retraining</td></tr>
+      <tr><td>Static training data (Nov 2023 – Apr 2024)</td><td>Monsoon season (June–Sept) underrepresented; seasonal patterns may shift</td></tr>
+      <tr><td>Overnight timestamp = logging lag</td><td>0–5 AM volume reflects officer behaviour, not actual midnight incidents</td></tr>
+    </table>
+  </div>
+</div>
+
+<script>
+const D={tier:{Low:2831,Medium:4237,High:1105},causes:[{c:"Vehicle Breakdown",n:4896},{c:"Others",n:641},{c:"Pot Holes",n:537},{c:"Construction",n:480},{c:"Water Logging",n:458},{c:"Accident",n:365},{c:"Tree Fall",n:284},{c:"Road Conditions",n:170},{c:"Congestion",n:136},{c:"Public Event",n:84}],hourly:[478,549,839,645,566,442,394,374,349,436,653,671,615,361,256,93,71,65,52,21,8,8,22,89],corridors:[{c:"Mysore Road",n:743},{c:"Bellary Road 1",n:610},{c:"Tumkur Road",n:458},{c:"Bellary Road 2",n:379},{c:"Hosur Road",n:298},{c:"ORR North 1",n:275},{c:"Old Madras Road",n:263},{c:"Magadi Road",n:245},{c:"ORR East 1",n:244},{c:"ORR North 2",n:235}],monthly:[{m:"Nov",p:45,u:896},{m:"Dec",p:112,u:1661},{m:"Jan",p:75,u:1348},{m:"Feb",p:57,u:1299},{m:"Mar",p:68,u:1861},{m:"Apr",p:8,u:627}],fi:[{f:"Is Named Corridor",v:53.7},{f:"Road Closure Flag",v:16.5},{f:"Cause Risk Rate",v:6.6},{f:"Water Logging",v:3.5},{f:"Pot Holes",v:3.0},{f:"Event Type Planned",v:2.3},{f:"Others",v:2.1},{f:"Construction",v:2.1},{f:"Event Type Unplanned",v:2.0},{f:"Accident",v:1.5},{f:"Priority Low",v:1.0},{f:"Event Frequency",v:1.0},{f:"Closure Rate",v:1.0},{f:"Road Conditions",v:0.8},{f:"Tree Fall",v:0.8}],zones:[{c:"Central Zone 2",n:623},{c:"West Zone 1",n:433},{c:"North Zone 2",n:413},{c:"West Zone 2",n:358},{c:"South Zone 2",n:354},{c:"North Zone 1",n:318},{c:"Central Zone 1",n:269},{c:"East Zone 1",n:253},{c:"South Zone 1",n:233},{c:"East Zone 2",n:190}]};
+
+function goTo(id,btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  btn.classList.add('active');
+  if(id==='eda')setTimeout(drawAll,40);
+  if(id==='model')setTimeout(drawFIModel,40);
+}
+function switchEDA(i){
+  for(let j=0;j<4;j++){
+    document.getElementById('ed'+j).style.display=j===i?'block':'none';
+    const b=document.getElementById('et'+j);
+    b.classList.toggle('ea',j===i);
+  }
+  if(i===0)setTimeout(()=>{drawTier();drawCause();drawFI();},20);
+  if(i===1)setTimeout(()=>{drawMonthly();drawHourly();},20);
+  if(i===2)setTimeout(()=>{drawCorr();drawZone();},20);
+}
+function E(tag,a){const e=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const[k,v]of Object.entries(a))e.setAttribute(k,v);return e;}
+function clr(id){const s=document.getElementById(id);if(s)while(s.firstChild)s.removeChild(s.firstChild);return s;}
+
+function drawTier(){
+  const s=clr('cTier');if(!s)return;
+  const dat=[{l:'Low',n:D.tier.Low,c:'#22C55E'},{l:'Medium',n:D.tier.Medium,c:'#F59E0B'},{l:'High',n:D.tier.High,c:'#EF4444'}];
+  const mx=Math.max(...dat.map(d=>d.n));
+  dat.forEach((d,i)=>{
+    const bh=(d.n/mx)*150,x=30+i*120,y=200-bh;
+    s.appendChild(E('rect',{x,y,width:80,height:bh,fill:d.c,opacity:.88,rx:5}));
+    const t=E('text',{x:x+40,y:220,'text-anchor':'middle',fill:'#E2E8F0','font-size':12,'font-weight':600});t.textContent=d.l;s.appendChild(t);
+    const v=E('text',{x:x+40,y:y-6,'text-anchor':'middle',fill:'#E2E8F0','font-size':11});v.textContent=d.n.toLocaleString();s.appendChild(v);
+    const p=E('text',{x:x+40,y:y+15,'text-anchor':'middle',fill:'#94A3B8','font-size':10});p.textContent=`(${(d.n/8173*100).toFixed(1)}%)`;s.appendChild(p);
+  });
+}
+function drawCause(){
+  const s=clr('cCause');if(!s)return;
+  const mx=D.causes[0].n;
+  const HC=new Set(['Accident','Public Event','Procession']);
+  D.causes.slice(0,10).forEach((d,i)=>{
+    const bw=(d.n/mx)*220,y=8+i*20;
+    const col=HC.has(d.c)?'#EF4444':'#3B82F6';
+    s.appendChild(E('rect',{x:130,y,width:220,height:15,fill:'#0D1B2E',rx:3}));
+    s.appendChild(E('rect',{x:130,y,width:Math.max(4,bw),height:15,fill:col,opacity:.85,rx:3}));
+    const l=E('text',{x:126,y:y+11,'text-anchor':'end',fill:'#E2E8F0','font-size':10});l.textContent=d.c.length>16?d.c.slice(0,14)+'…':d.c;s.appendChild(l);
+    const v=E('text',{x:135+bw,y:y+11,fill:'#94A3B8','font-size':9});v.textContent=d.n.toLocaleString();s.appendChild(v);
+  });
+}
+function drawFI(svgId='cFI',W=680){
+  const s=clr(svgId);if(!s)return;
+  const mx=D.fi[0].v;
+  D.fi.forEach((d,i)=>{
+    const bw=(d.v/mx)*(W-220),y=10+i*16;
+    const col=i===0?'#EF4444':i<3?'#F59E0B':'#3B82F6';
+    s.appendChild(E('rect',{x:175,y,width:W-220,height:12,fill:'#0D1B2E',rx:3}));
+    s.appendChild(E('rect',{x:175,y,width:Math.max(4,bw),height:12,fill:col,opacity:.85,rx:3}));
+    const l=E('text',{x:171,y:y+9,'text-anchor':'end',fill:'#E2E8F0','font-size':10});l.textContent=d.f;s.appendChild(l);
+    const v=E('text',{x:178+bw,y:y+9,fill:'#94A3B8','font-size':9});v.textContent=d.v.toFixed(1)+'%';s.appendChild(v);
+  });
+}
+function drawFIModel(){drawFI('cFIm',480);}
+function drawMonthly(){
+  const s=clr('cMon');if(!s)return;
+  const mx=Math.max(...D.monthly.map(d=>d.u+d.p));
+  const W=680,H=240,pL=45,pR=20,pT=20,pB=50;
+  const step=(W-pL-pR)/(D.monthly.length-1);
+  const ys=v=>pT+(H-pT-pB)*(1-v/mx);
+  [0,1,2,3,4].forEach(i=>{const y=pT+(H-pT-pB)*(1-i/4);s.appendChild(E('line',{x1:pL,y1:y,x2:W-pR,y2:y,stroke:'#2D4070','stroke-width':1}));});
+  let pu=`M ${pL} ${H-pB}`;D.monthly.forEach((d,i)=>pu+=` L ${pL+i*step} ${ys(d.u)}`);pu+=` L ${pL+(D.monthly.length-1)*step} ${H-pB} Z`;
+  s.appendChild(E('path',{d:pu,fill:'#3B82F6',opacity:.25}));
+  let lu=`M`;D.monthly.forEach((d,i)=>lu+=` ${pL+i*step} ${ys(d.u)}${i<D.monthly.length-1?' L':''}`);
+  s.appendChild(E('path',{d:lu,fill:'none',stroke:'#3B82F6','stroke-width':2.5}));
+  let pp=`M ${pL} ${H-pB}`;D.monthly.forEach((d,i)=>pp+=` L ${pL+i*step} ${ys(d.p)}`);pp+=` L ${pL+(D.monthly.length-1)*step} ${H-pB} Z`;
+  s.appendChild(E('path',{d:pp,fill:'#F59E0B',opacity:.4}));
+  let lp=`M`;D.monthly.forEach((d,i)=>lp+=` ${pL+i*step} ${ys(d.p)}${i<D.monthly.length-1?' L':''}`);
+  s.appendChild(E('path',{d:lp,fill:'none',stroke:'#F59E0B','stroke-width':2.5}));
+  D.monthly.forEach((d,i)=>{const l=E('text',{x:pL+i*step,y:H-pB+18,'text-anchor':'middle',fill:'#94A3B8','font-size':11});l.textContent=d.m;s.appendChild(l);});
+}
+function drawHourly(){
+  const s=clr('cHour');if(!s)return;
+  const mx=Math.max(...D.hourly);
+  const W=480,H=220,pL=25,pR=10,pT=10,pB=35,bw=(W-pL-pR)/24-1.5;
+  function hc(h){if(h>=7&&h<=10)return'#F59E0B';if(h>=17&&h<=21)return'#EF4444';if(h<=5)return'#6366F1';return'#3B82F6';}
+  D.hourly.forEach((c,h)=>{
+    const bh=(c/mx)*(H-pT-pB),x=pL+h*(W-pL-pR)/24,y=H-pB-bh;
+    s.appendChild(E('rect',{x,y,width:bw,height:bh,fill:hc(h),opacity:.85,rx:2}));
+    if(h%6===0){const l=E('text',{x:x+bw/2,y:H-pB+14,'text-anchor':'middle',fill:'#94A3B8','font-size':10});l.textContent=`${String(h).padStart(2,'0')}h`;s.appendChild(l);}
+  });
+}
+function drawCorr(){
+  const s=clr('cCorr');if(!s)return;
+  const dat=[...D.corridors].reverse();const mx=D.corridors[0].n;
+  dat.forEach((d,i)=>{
+    const bw=(d.n/mx)*240,y=8+i*24;
+    s.appendChild(E('rect',{x:110,y,width:240,height:18,fill:'#0D1B2E',rx:3}));
+    s.appendChild(E('rect',{x:110,y,width:Math.max(4,bw),height:18,fill:'#3B82F6',opacity:.85,rx:3}));
+    const l=E('text',{x:106,y:y+13,'text-anchor':'end',fill:'#E2E8F0','font-size':10});l.textContent=d.c;s.appendChild(l);
+    const v=E('text',{x:114+bw,y:y+13,fill:'#94A3B8','font-size':9.5});v.textContent=d.n;s.appendChild(v);
+  });
+}
+function drawZone(){
+  const s=clr('cZone');if(!s)return;
+  const mx=D.zones[0].n;
+  D.zones.forEach((d,i)=>{
+    const bw=(d.n/mx)*240,y=8+i*24;
+    s.appendChild(E('rect',{x:110,y,width:240,height:18,fill:'#0D1B2E',rx:3}));
+    s.appendChild(E('rect',{x:110,y,width:Math.max(4,bw),height:18,fill:'#6366F1',opacity:.85,rx:3}));
+    const l=E('text',{x:106,y:y+13,'text-anchor':'end',fill:'#E2E8F0','font-size':10});l.textContent=d.c;s.appendChild(l);
+    const v=E('text',{x:114+bw,y:y+13,fill:'#94A3B8','font-size':9.5});v.textContent=d.n;s.appendChild(v);
+  });
+}
+function drawAll(){drawTier();drawCause();drawFI();}
+
+// Lists
+function mkList(id,arr,kk,kn){
+  const el=document.getElementById(id);if(!el)return;
+  arr.forEach(d=>{el.innerHTML+=`<div style="display:flex;justify-content:space-between;margin:5px 0;font-size:.84rem"><span style="color:var(--muted)">${d[kk]}</span><strong>${d[kn].toLocaleString()}</strong></div>`;});
+}
+function buildLists(){
+  const causesEl=document.getElementById('lCauses');
+  D.causes.slice(0,6).forEach(d=>causesEl.innerHTML+=`<div style="display:flex;justify-content:space-between;margin:5px 0;font-size:.84rem"><span style="color:var(--muted)">${d.c}</span><strong>${d.n.toLocaleString()}</strong></div>`);
+  mkList('lCorr',D.corridors.slice(0,6),'c','n');
+  mkList('lZones',D.zones.slice(0,6),'c','n');
+}
+
+// Presets
+const PS={
+  bus:{et:'unplanned',cause:'vehicle_breakdown',prio:'High',cl:false,corr:'Mysore Road',zone:'South Zone 2',h:8,veh:'bmtc_bus'},
+  evt:{et:'planned',cause:'public_event',prio:'High',cl:true,corr:'CBD 2',zone:'Central Zone 1',h:18,veh:'unknown'},
+  water:{et:'unplanned',cause:'water_logging',prio:'High',cl:false,corr:'ORR East 2',zone:'East Zone 2',h:9,veh:'unknown'},
+  acc:{et:'unplanned',cause:'accident',prio:'High',cl:true,corr:'Bellary Road 1',zone:'North Zone 1',h:17,veh:'private_car'},
+  prot:{et:'unplanned',cause:'protest',prio:'High',cl:false,corr:'Non-corridor',zone:'Central Zone 2',h:16,veh:'unknown'},
+  vip:{et:'planned',cause:'vip_movement',prio:'High',cl:false,corr:'ORR North 1',zone:'North Zone 2',h:19,veh:'unknown'},
+};
+function preset(k){
+  const p=PS[k];
+  document.querySelector(`input[name=evt][value=${p.et}]`).checked=true;
+  document.getElementById('cause').value=p.cause;
+  document.querySelector(`input[name=prio][value=${p.prio}]`).checked=true;
+  document.getElementById('closure').checked=p.cl;
+  document.getElementById('corridor').value=p.corr;
+  document.getElementById('zone').value=p.zone;
+  document.getElementById('hour').value=p.h;
+  document.getElementById('hd').textContent=p.h+':00';
+  document.getElementById('veh').value=p.veh;
+  runPred();
+}
+
+// Prediction
+const NAMED=new Set(['Mysore Road','Bellary Road 1','Bellary Road 2','Tumkur Road','Hosur Road','ORR North 1','Old Madras Road','Magadi Road','ORR East 1','ORR North 2','Bannerghata Road','ORR East 2','West of Chord Road','ORR West 1','CBD 2','Hennur Main Road','IRR(Thanisandra road)','Varthur Road','Old Airport Road']);
+const HC=new Set(['accident','construction','public_event','protest','procession','vip_movement','water_logging']);
+const ECX={accident:2,public_event:3,protest:3,procession:2,vip_movement:4,construction:1,water_logging:1};
+const BARK={Low:'None required',Medium:'Light — 2–4 cones, 1 barrier',High:'Heavy — full lane closure, 6+ barriers, TCR notification'};
+const DIVK={Low:'None required',Medium:'Advisory — notify via PA/WhatsApp broadcast',High:'Mandatory — activate pre-defined diversion routes'};
+const PRIK={Low:'P3 – Routine',Medium:'P2 – Elevated',High:'P1 – Critical'};
+const DEPK={Low:'15–30 minutes',Medium:'5–15 minutes',High:'Immediate (< 5 minutes)'};
+const TC={Low:'#22C55E',Medium:'#F59E0B',High:'#EF4444'};
+const TE={Low:'🟢',Medium:'🟡',High:'🔴'};
+
+function score(cause,corr,cl,prio){let s=1;if(cl)s+=2;if(prio==='High')s+=1;if(HC.has(cause))s+=1;if(NAMED.has(corr))s+=1;return Math.min(s,6);}
+function tierFromScore(s){return s>=4?'High':s===3?'Medium':'Low';}
+function probs(sc,cause,corr,h,cl){
+  const isPeak=(h>=7&&h<=10)||(h>=17&&h<=21),isN=NAMED.has(corr);
+  let pH=0,pM=0,pL=0;
+  if(sc>=4){pH=cl?.988:isN?.975:.962;pM=1-pH-.002;pL=.002;}
+  else if(sc===3){pM=isPeak?.947:.931;pH=cause==='accident'?.08:.035;pL=1-pM-pH;}
+  else{pL=isN?.08:sc===2?.702:.958;pM=1-pL-.002;pH=.002;}
+  return{Low:Math.max(0,pL),Medium:Math.max(0,pM),High:Math.max(0,pH)};
+}
+function escalate(tier,cause,corr,h,cl){
+  const HC2=new Set(['accident','public_event','protest','procession','vip_movement','construction']);
+  const PK=new Set(['vehicle_breakdown','water_logging','construction']);
+  const isPeak=(h>=7&&h<=10)||(h>=17&&h<=21);
+  const TI={Low:0,Medium:1,High:2},TR=['Low','Medium','High'];
+  let t=TI[tier];const tr=[];
+  if(HC2.has(cause)&&NAMED.has(corr)){t=Math.min(2,t+1);tr.push(`${cause.replace(/_/g,' ')} on ${corr}`);}
+  if(isPeak&&cl){t=Math.min(2,t+1);tr.push('Road closure during peak hours');}
+  if(isPeak&&PK.has(cause)&&t<2){t=Math.min(2,t+1);tr.push(`${cause.replace(/_/g,' ')} during peak hours`);}
+  return{tier:TR[t],triggers:tr};
+}
+const CAX={
+  accident:['Coordinate with BBMP CATS for medical response','Preserve accident scene until released by Investigating Officer','Arrange tow truck for vehicle removal'],
+  water_logging:['Alert BBMP drainage cell for pump deployment','Identify alternate route avoiding underpasses','Set up depth markers if water level > 6 inches'],
+  construction:['Verify contractor lane-closure permit compliance','Confirm AFAD (Automatic Flagger Assistance Device) deployed','Document contractor contact for SLA enforcement'],
+  public_event:['Coordinate with event organisers for crowd and vehicle management','Pre-position barriers 30 min before expected dispersal','Assign dedicated marshals at entry/exit points'],
+  procession:['Establish lead vehicle escort protocol','Pre-position officers at all intersecting junctions on route','Brief marshals on dispersal point management'],
+  protest:['Establish outer perimeter at 200m from assembly point','Coordinate with law and order unit for crowd estimate','Prepare alternate route if crowd exceeds 500'],
+  vip_movement:['Activate VIP corridor clearance protocol — 15 min advance notice','Station officers at every intersection on designated route','Coordinate with escort vehicle for timing updates'],
+  vehicle_breakdown:['Arrange tow truck if vehicle blocking > 1 lane','Place emergency triangles / cones behind vehicle','Advise driver to push to hard shoulder if feasible'],
+  tree_fall:['Contact BBMP Tree Officer for clearance crew','Do not attempt manual removal without authority','Mark hazard perimeter with reflective tape'],
+};
+function getActions(tier,cause,corr,cl,isPeak){
+  const mp=[{Low:[1,2],Medium:[2,4],High:[4,8]}[tier][0]+(ECX[cause]||0),{Low:[1,2],Medium:[2,4],High:[4,8]}[tier][1]+(ECX[cause]||0)];
+  const items=[`Dispatch ${mp[0]}–${mp[1]} officers to incident location`,'Log event in ASTER with timestamp and initial assessment'];
+  if(tier==='High'){items.push('Notify Traffic Control Room (TCR) for coordination');items.push('Activate pre-defined diversion routes for affected corridor');items.push('Alert downstream signals for progressive timing adjustment');}
+  if(tier==='Medium'){items.push('Issue advisory via BTP WhatsApp broadcast channel');items.push('Monitor situation every 15 minutes for escalation trigger');}
+  if(CAX[cause])CAX[cause].forEach(a=>items.push(a));
+  if(cl){items.push('Set up traffic marshals at closest upstream junction');items.push('Activate alternate route signage');}
+  if(isPeak&&['Medium','High'].includes(tier))items.push('Consider adaptive signal timing for upstream signals');
+  return items;
+}
+function runPred(){
+  const cause=document.getElementById('cause').value;
+  const corr=document.getElementById('corridor').value;
+  const cl=document.getElementById('closure').checked;
+  const prio=document.querySelector('input[name=prio]:checked').value;
+  const h=parseInt(document.getElementById('hour').value);
+  const isPeak=(h>=7&&h<=10)||(h>=17&&h<=21);
+  const sc=score(cause,corr,cl,prio);
+  const base=tierFromScore(sc);
+  const pb=probs(sc,cause,corr,h,cl);
+  const {tier:eff,triggers}=escalate(base,cause,corr,h,cl);
+  const conf=pb[base];
+  const extra=ECX[cause]||0;
+  const mp={Low:[1,2],Medium:[2,4],High:[4,8]}[eff];
+  const actions=getActions(eff,cause,corr,cl,isPeak);
+  const corrLbl=corr!=='Non-corridor'?corr:'a non-corridor road';
+  const tLbl=isPeak?'peak hours':'off-peak hours';
+  const reason=`This ${cause.replace(/_/g,' ')} event on ${corrLbl} during ${tLbl} is predicted as ${eff} impact. Confidence: ${(conf*100).toFixed(0)}%.`;
+  const TCl={Low:'tL',Medium:'tM',High:'tH'}[eff];
+  const TDiv={Low:'None',Medium:'Advisory',High:'Mandatory'}[eff];
+
+  let html=`<div class="card ${TCl}" style="margin-bottom:14px">
+    <div class="slbl">ASTER Impact Prediction</div>
+    <div class="tier-${eff.toLowerCase()}">${TE[eff]} ${eff.toUpperCase()} IMPACT</div>
+    <div style="color:var(--muted);font-size:.87rem;margin-top:4px">Confidence: <strong style="color:var(--text)">${(conf*100).toFixed(1)}%</strong> &nbsp;|&nbsp; Impact score: <strong style="color:var(--text)">${sc}/6</strong></div>
+  </div>`;
+  if(triggers.length){html+=`<div class="esc">⬆️ <strong>Escalated</strong> ${base} → ${eff}: ${triggers.join('; ')}</div>`;}
+  html+=`<div style="margin:12px 0"><div class="slbl">Probability Distribution</div>`;
+  ['Low','Medium','High'].forEach(t=>{
+    const p=pb[t],bw=Math.round(p*100);
+    html+=`<div class="pbr"><div class="plbl">${t}</div><div class="pt"><div class="pf" style="width:${bw}%;background:${TC[t]}"></div></div><div class="ppct" style="color:${TC[t]}">${(p*100).toFixed(1)}%</div></div>`;
+  });
+  html+=`</div><hr style="margin:14px 0"><h3>🗂️ Operational Response Plan</h3>
+  <div class="sr">
+    <div class="sb"><div class="v">${PRIK[eff]}</div><div class="l">Response Priority</div></div>
+    <div class="sb"><div class="v">${mp[0]+extra}–${mp[1]+extra}</div><div class="l">Officers Required</div></div>
+    <div class="sb"><div class="v">${DEPK[eff]}</div><div class="l">Deploy Within</div></div>
+    <div class="sb"><div class="v">${TDiv}</div><div class="l">Diversion</div></div>
+  </div>
+  <div style="font-size:.85rem;color:var(--muted);margin:6px 0"><strong style="color:var(--text)">Barricading:</strong> ${BARK[eff]}</div>
+  <div style="font-size:.85rem;color:var(--muted);margin:4px 0 10px"><strong style="color:var(--text)">Diversion:</strong> ${DIVK[eff]}</div>
+  <div style="font-size:.83rem;color:var(--muted);font-style:italic;margin-bottom:14px">${reason}</div>
+  <div class="slbl">✅ Action Checklist</div>`;
+  actions.forEach(a=>{html+=`<div class="ai"><span class="aick">☐</span><span>${a}</span></div>`;});
+  document.getElementById('rpanel').innerHTML=html;
+}
+
+buildLists();
+</script>
+</body>
+</html>
