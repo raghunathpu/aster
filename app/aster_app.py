@@ -1,4 +1,4 @@
-﻿"""
+"""
 ASTER - Adaptive Smart Traffic Event Response
 ================================================
 Streamlit Demo Application
@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import seaborn as sns
 import streamlit as st
+import pydeck as pdk
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -145,7 +146,112 @@ def load_model():
     fi   = pd.read_csv(os.path.join(MODELS, "feature_importance.csv"))
     with open(os.path.join(MODELS, "evaluation_metrics.json")) as f:
         metrics = json.load(f)
-    return gb, enc, le, fnames, fi, metrics
+
+    # Load GRIDVISION components
+    from src.modeling.lgb_inference import LGBInferenceService
+    from src.recommendation.routing_engine import RoutingEngine
+    from src.recommendation.manpower import ManpowerOptimizer
+
+    lgb_service = LGBInferenceService(
+        models_dir=os.path.join(MODELS, "lgb"),
+        dataset_path=os.path.join(MODELS, "processed_dataset.csv")
+    )
+    
+    re_path = os.path.join(ROOT, "data", "graphs", "bengaluru_road_graph.pkl")
+    router = RoutingEngine(graph_path=re_path)
+    
+    manpower_opt = ManpowerOptimizer(total_officers=30)
+
+    return gb, enc, le, fnames, fi, metrics, lgb_service, router, manpower_opt
+
+
+
+def generate_leaflet_map(incident_lat, incident_lon, incident_name, barricades, routes):
+    import json
+    barricades_json = json.dumps(barricades)
+    routes_json = json.dumps(routes)
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Leaflet Tactical Dispatch Map</title>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <style>
+            html, body, #map {{ height: 100%; width: 100%; margin: 0; padding: 0; background-color: #0F1729; }}
+            .leaflet-popup-content-wrapper {{ background: #1E2D4E !important; color: #E2E8F0 !important; border: 1px solid #2D4070 !important; border-radius: 8px !important; }}
+            .leaflet-popup-tip {{ background: #1E2D4E !important; }}
+            .popup-title {{ font-weight: bold; color: #93C5FD; font-size: 0.95rem; margin-bottom: 4px; }}
+            .popup-detail {{ font-size: 0.8rem; color: #94A3B8; }}
+        </style>
+    </head>
+    <body>
+        <div id="map"></div>
+        <script>
+            var map = L.map('map', {{ zoomControl: false }}).setView([{incident_lat}, {incident_lon}], 14);
+            L.control.zoom({{ position: 'topright' }}).addTo(map);
+
+            L.tileLayer('https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{
+                attribution: '&copy; OpenStreetMap &copy; CARTO',
+                subdomains: 'abcd',
+                maxZoom: 20
+            }}).addTo(map);
+
+            var incidentIcon = L.divIcon({{
+                className: 'custom-div-icon',
+                html: "<div style='background-color:#EF4444; width:16px; height:16px; border-radius:50%; border:3px solid #FFFFFF; box-shadow:0 0 12px #EF4444;'></div>",
+                iconSize: [16, 16],
+                iconAnchor: [8, 8]
+            }});
+
+            var incidentMarker = L.marker([{incident_lat}, {incident_lon}], {{icon: incidentIcon}}).addTo(map);
+            incidentMarker.bindPopup("<div class='popup-title'>⚠️ {incident_name} (Incident Center)</div><div class='popup-detail'>Location: {incident_lat:.4f}, {incident_lon:.4f}</div>").openPopup();
+
+            L.circle([{incident_lat}, {incident_lon}], {{
+                color: '#EF4444',
+                fillColor: '#EF4444',
+                fillOpacity: 0.15,
+                radius: 400,
+                dashArray: '5, 5'
+            }}).addTo(map);
+
+            var barricades = {barricades_json};
+            barricades.forEach(function(b) {{
+                var barricadeIcon = L.divIcon({{
+                    className: 'barricade-icon',
+                    html: "<div style='background-color:#F59E0B; width:12px; height:12px; border-radius:50%; border:2px solid #FFFFFF; box-shadow:0 0 8px #F59E0B;'></div>",
+                    iconSize: [12, 12],
+                    iconAnchor: [6, 6]
+                }});
+                var marker = L.marker([b.latitude, b.longitude], {{icon: barricadeIcon}}).addTo(map);
+                marker.bindPopup("<div class='popup-title'>🚧 Barricade & Diversion Node</div><div class='popup-detail'><b>" + b.intersection_id + "</b><br>" + b.road_name + "</div>");
+            }});
+
+            var routes = {routes_json};
+            routes.forEach(function(r, idx) {{
+                if (r.path_coordinates && r.path_coordinates.length > 0) {{
+                    var color = idx === 0 ? '#3B82F6' : '#10B981';
+                    var weight = idx === 0 ? 5 : 3;
+                    var opacity = idx === 0 ? 0.85 : 0.65;
+                    var dashArray = idx === 0 ? null : '5, 10';
+                    
+                    var polyline = L.polyline(r.path_coordinates, {{
+                        color: color,
+                        weight: weight,
+                        opacity: opacity,
+                        dashArray: dashArray
+                    }}).addTo(map);
+                    
+                    polyline.bindPopup("<div class='popup-title'>🔀 " + r.description + "</div><div class='popup-detail'>Time: " + r.travel_time_min + " min<br>Distance: " + r.distance_m + " m</div>");
+                }}
+            }});
+        </script>
+    </body>
+    </html>
+    """
+    return html
 
 
 def predict_event(event_dict, gb, enc, le, fnames):
@@ -224,9 +330,10 @@ with st.sidebar:
 # ─────────────────────────────────────────────────────────────────
 # Load data & model
 # ─────────────────────────────────────────────────────────────────
-with st.spinner("Loading data and model…"):
+with st.spinner("Loading data, road network, and models…"):
     df = load_data()
-    gb, enc, le, fnames, fi, metrics = load_model()
+    gb, enc, le, fnames, fi, metrics, lgb_service, router, manpower_opt = load_model()
+
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -255,6 +362,46 @@ if page == "🏠 Overview":
     c4.metric("Road Closures",     f"{closure_events:,}")
     c5.metric("Corridors Affected",f"{corridors_hit}")
     c6.metric("Median Resolution", f"{avg_dur:.0f} min")
+
+    st.markdown("---")
+    
+    st.markdown("### 🗺️ Live Event Density Map")
+    st.markdown("This interactive map displays historical traffic events across Bengaluru. **High-impact** events are highlighted in red, **Medium** in yellow, and **Low** in green. Hover over points to see details. You can zoom, pan, and tilt (Right Click + Drag) to explore.")
+    
+    # Filter valid coordinates and prepare map data
+    map_df = df.dropna(subset=['latitude', 'longitude']).copy()
+    
+    def get_color(tier):
+        if tier == 'High': return [239, 68, 68, 200]
+        if tier == 'Medium': return [245, 158, 11, 200]
+        return [34, 197, 94, 200]
+        
+    map_df['color'] = map_df['impact_tier'].apply(get_color)
+    map_df['cause_label'] = map_df['event_cause'].apply(lambda x: CAUSE_LABELS.get(x, x.replace('_', ' ').title()))
+    
+    view_state = pdk.ViewState(latitude=12.9716, longitude=77.5946, zoom=10.5, pitch=45)
+    
+    layer = pdk.Layer(
+        'ScatterplotLayer',
+        data=map_df,
+        get_position='[longitude, latitude]',
+        get_color='color',
+        get_radius=150,
+        pickable=True,
+        opacity=0.8,
+        stroked=True,
+        filled=True,
+        radius_scale=1,
+        radius_min_pixels=3,
+        radius_max_pixels=10,
+        line_width_min_pixels=0.5,
+    )
+    
+    st.pydeck_chart(pdk.Deck(
+        initial_view_state=view_state,
+        layers=[layer],
+        tooltip={"html": "<b>Cause:</b> {cause_label}<br/><b>Corridor:</b> {corridor}<br/><b>Impact:</b> {impact_tier}", "style": {"backgroundColor": "#1E2D4E", "color": "#E2E8F0", "border": "1px solid #2D4070"}}
+    ))
 
     st.markdown("---")
 
@@ -288,7 +435,7 @@ into a specific, actionable response plan - in under 2 seconds.
         st.markdown("### Impact Distribution")
         img_path = os.path.join(ASSETS, "eda_impact_dist.png")
         if os.path.exists(img_path):
-            st.image(img_path, use_container_width=True)
+            st.image(img_path, width="stretch")
 
         st.markdown("### The Three-Tier System")
         for tier, color, desc in [
@@ -338,27 +485,27 @@ elif page == "📊 EDA & Insights":
         with c1:
             st.markdown("#### Event Cause Distribution")
             img = os.path.join(ASSETS, "eda_cause_dist.png")
-            if os.path.exists(img): st.image(img, use_container_width=True)
+            if os.path.exists(img): st.image(img, width="stretch")
             st.caption("Vehicle breakdowns dominate (60%). High-impact causes - accidents, construction, events - form a critical minority requiring elevated response.")
         with c2:
             st.markdown("#### Cause x Impact Tier Heatmap")
             img = os.path.join(ASSETS, "eda_heatmap.png")
-            if os.path.exists(img): st.image(img, use_container_width=True)
+            if os.path.exists(img): st.image(img, width="stretch")
             st.caption("Accidents, construction and public events show the highest High-impact concentration. Vehicle breakdowns generate volume but are mostly Medium due to corridor assignment.")
 
         st.markdown("#### Impact Tier Distribution")
         img = os.path.join(ASSETS, "eda_impact_dist.png")
-        if os.path.exists(img): st.image(img, use_container_width=True)
+        if os.path.exists(img): st.image(img, width="stretch")
 
     with tab2:
         st.markdown("#### Monthly Event Volume Trend")
         img = os.path.join(ASSETS, "eda_monthly_trend.png")
-        if os.path.exists(img): st.image(img, use_container_width=True)
+        if os.path.exists(img): st.image(img, width="stretch")
         st.caption("March 2024 saw the highest event volume (1,929). Planned events peak in construction season (Nov-Mar).")
 
         st.markdown("#### Hourly Distribution (IST)")
         img = os.path.join(ASSETS, "eda_hourly.png")
-        if os.path.exists(img): st.image(img, use_container_width=True)
+        if os.path.exists(img): st.image(img, width="stretch")
         st.caption("High overnight reporting (0-5 AM) reflects patrol-officer logging of overnight incidents at shift start. True operational peaks align with morning (7-10 AM) and evening (5-9 PM) commute windows.")
 
         col_a, col_b = st.columns(2)
@@ -373,6 +520,7 @@ elif page == "📊 EDA & Insights":
             bars = ax.bar(dow_counts.index, dow_counts.values,
                           color=['#EF4444' if d in ['Saturday','Sunday'] else '#3B82F6' for d in dow_counts.index],
                           edgecolor='none', alpha=0.9)
+            ax.set_xticks(range(len(dow_counts)))
             ax.set_xticklabels(dow_counts.index, rotation=30, ha='right', color='#E2E8F0', fontsize=8)
             ax.tick_params(colors='#E2E8F0')
             ax.spines[['top','right']].set_visible(False)
@@ -385,19 +533,19 @@ elif page == "📊 EDA & Insights":
         with col_b:
             st.markdown("**Event Resolution Time**")
             img = os.path.join(ASSETS, "eda_duration.png")
-            if os.path.exists(img): st.image(img, use_container_width=True)
+            if os.path.exists(img): st.image(img, width="stretch")
 
     with tab3:
         c1, c2 = st.columns(2)
         with c1:
             st.markdown("#### Top Corridors by Volume")
             img = os.path.join(ASSETS, "eda_corridors.png")
-            if os.path.exists(img): st.image(img, use_container_width=True)
+            if os.path.exists(img): st.image(img, width="stretch")
             st.caption("Mysore Road leads with 743 events. All named corridors are classified High priority - a key signal in ASTER's scoring.")
         with c2:
             st.markdown("#### Zone-Wise Event Density")
             img = os.path.join(ASSETS, "eda_zones.png")
-            if os.path.exists(img): st.image(img, use_container_width=True)
+            if os.path.exists(img): st.image(img, width="stretch")
             st.caption("Central Zone 2 (MG Road, Brigade area) and West Zone 1 (Mysore Road corridor) show the highest combined event density.")
 
         st.markdown("#### Hotspot Police Stations (top 15)")
@@ -415,7 +563,7 @@ elif page == "📊 EDA & Insights":
                 "road_closures": "Road Closures",
                 "high_%": "High Impact %",
             }),
-            use_container_width=True, hide_index=True
+            width="stretch", hide_index=True
         )
 
     with tab4:
@@ -460,8 +608,19 @@ elif page == "🔮 Predict & Respond":
         with st.expander("▸ Location & Corridor", expanded=True):
             corridor = st.selectbox("Corridor", CORRIDORS)
             zone     = st.selectbox("Zone", ZONES)
-            lat      = st.number_input("Latitude",  value=12.97, min_value=12.7, max_value=13.3, step=0.001, format="%.4f")
-            lon      = st.number_input("Longitude", value=77.59, min_value=77.3, max_value=77.9, step=0.001, format="%.4f")
+            
+            # Map selected junction to coordinates if selected
+            junction_options = ["Custom Coords"] + sorted(list(router.junctions.keys()))
+            selected_junc = st.selectbox("Select Nearest Bengaluru Junction Node", junction_options)
+            
+            if selected_junc != "Custom Coords":
+                junc_lat, junc_lon = router.get_junction_coords(selected_junc)
+                lat = st.number_input("Latitude", value=junc_lat, min_value=12.7, max_value=13.3, step=0.001, format="%.4f")
+                lon = st.number_input("Longitude", value=junc_lon, min_value=77.3, max_value=77.9, step=0.001, format="%.4f")
+            else:
+                lat = st.number_input("Latitude",  value=12.97, min_value=12.7, max_value=13.3, step=0.001, format="%.4f")
+                lon = st.number_input("Longitude", value=77.59, min_value=77.3, max_value=77.9, step=0.001, format="%.4f")
+
 
         with st.expander("▸ Time & Vehicle", expanded=True):
             event_hour = st.slider("Hour of Day (IST)", 0, 23, 8,
@@ -509,7 +668,7 @@ elif page == "🔮 Predict & Respond":
             veh_type     = p.get("veh_type", veh_type)
             del st.session_state["preset"]
 
-        predict_btn = st.button("🚀  Analyse Event & Generate Response Plan", use_container_width=True)
+        predict_btn = st.button("🚀  Analyse Event & Generate Response Plan", width="stretch")
 
     # ── Right panel - results ─────────────────────────────────────
     with col_result:
@@ -532,7 +691,8 @@ elif page == "🔮 Predict & Respond":
                 "start_datetime": now_utc,
             }
 
-            with st.spinner("Running ASTER impact model…"):
+            with st.spinner("Running ASTER models & optimization..."):
+                # 1. Base prediction
                 pred_tier, prob_dict, confidence = predict_event(event_dict, gb, enc, le, fnames)
                 raw_score = compute_raw_impact_score(event_dict)
                 plan = generate_response_plan(
@@ -548,32 +708,93 @@ elif page == "🔮 Predict & Respond":
                 )
                 plan_d = plan_to_dict(plan)
 
+                # 2. LightGBM Prediction
+                lgb_event = {
+                    "event_type": event_type,
+                    "event_cause": cause_key,
+                    "vehicle_type": veh_type,
+                    "latitude": lat,
+                    "longitude": lon,
+                    "corridor": corridor,
+                    "zone": zone,
+                    "start_datetime": now_utc
+                }
+                lgb_preds = lgb_service.predict(lgb_event)
+
+                # Map coordinates to graph node
+                nearest_junc = router.find_nearest_junction(lat, lon)
+                junc_lat, junc_lon = router.get_junction_coords(nearest_junc)
+
+                # 3. Barricading & Diversion Route planning
+                barricades = router.recommend_barricades(nearest_junc, impact_radius_hops=1)
+                
+                neighbors = list(router.graph.neighbors(nearest_junc)) if router.graph else ["RichmondCircle", "CorporationCircle"]
+                routes = []
+                if len(neighbors) >= 2:
+                    routes = router.get_alternative_routes(neighbors[0], neighbors[1], blocked_node=nearest_junc)
+                else:
+                    routes = router.get_alternative_routes("RichmondCircle", "CorporationCircle", blocked_node=nearest_junc)
+
+                # 4. Manpower optimization
+                opt_events = [
+                    {"event_id": "1", "junction": "Mekhri Circle", "predicted_eis": 0.82, "predicted_priority": 1, "requires_road_closure": 1},
+                    {"event_id": "2", "junction": "Silk Board Junction", "predicted_eis": 0.68, "predicted_priority": 1, "requires_road_closure": 0},
+                    {"event_id": "3", "junction": "Ayyappa Temple", "predicted_eis": 0.35, "predicted_priority": 0, "requires_road_closure": 0},
+                    {"event_id": "current", "junction": nearest_junc, "predicted_eis": lgb_preds["event_impact_score"], "predicted_priority": lgb_preds["priority_encoded"], "requires_road_closure": lgb_preds["requires_road_closure"]}
+                ]
+                allocations = manpower_opt.optimize(opt_events)
+                
+                # Retrieve our incident's allocation
+                current_allocation = 2
+                for alloc in allocations:
+                    if alloc["event_id"] == "current":
+                        current_allocation = alloc["allocated_officers"]
+
             eff_tier = plan_d["effective_tier"]
             badge_cls = TIER_BADGE_CLASS[eff_tier]
             card_cls  = TIER_CARD_CLASS[eff_tier]
 
             # ── Impact prediction card ──────────────────────────
             tier_icon = {"Low": "🟢", "Medium": "🟡", "High": "🔴"}[eff_tier]
-            st.markdown(
-                f'<div class="card {card_cls}">'
-                f'<p class="section-title">Impact Prediction</p>'
-                f'<div style="font-size:2rem; font-weight:800; color:{TIER_COLORS[eff_tier]}">'
-                f'{tier_icon} {eff_tier.upper()} IMPACT</div>'
-                f'<div style="color:#94A3B8; font-size:0.9rem; margin-top:4px">'
-                f'Model confidence: <strong style="color:#E2E8F0">{confidence*100:.1f}%</strong>'
-                f' &nbsp;|&nbsp; Impact score: <strong style="color:#E2E8F0">{raw_score}/6</strong>'
-                f'</div></div>',
-                unsafe_allow_html=True
-            )
+            
+            # Map LightGBM impact score to tier label
+            lgb_score = lgb_preds["event_impact_score"]
+            lgb_tier = "Low" if lgb_score < 0.35 else "Medium" if lgb_score < 0.55 else "High"
+            lgb_tier_color = TIER_COLORS[lgb_tier]
+            lgb_tier_icon = TIER_EMOJI[lgb_tier]
 
-            if plan_d["effective_tier"] != plan_d["predicted_tier"]:
-                st.warning(
-                    f"⬆️ **Escalated** from {plan_d['predicted_tier']} -> {plan_d['effective_tier']}  "
-                    f"because: {'; '.join(plan_d['escalation_triggers'])}"
+            st.markdown(f"### 🎯 Prediction Results")
+            
+            col_base, col_lgb = st.columns(2)
+            
+            with col_base:
+                st.markdown(
+                    f'<div class="card {card_cls}">'
+                    f'<p class="section-title">Baseline Predictor (GBM)</p>'
+                    f'<div style="font-size:1.5rem; font-weight:800; color:{TIER_COLORS[eff_tier]}">'
+                    f'{tier_icon} {eff_tier.upper()} IMPACT</div>'
+                    f'<div style="color:#94A3B8; font-size:0.85rem; margin-top:4px">'
+                    f'Confidence: <strong style="color:#E2E8F0">{confidence*100:.1f}%</strong><br>'
+                    f'Impact score: <strong style="color:#E2E8F0">{raw_score}/6</strong>'
+                    f'</div></div>',
+                    unsafe_allow_html=True
+                )
+                
+            with col_lgb:
+                st.markdown(
+                    f'<div class="card" style="border-left: 4px solid {lgb_tier_color}">'
+                    f'<p class="section-title">Cascading AI Engine (LightGBM)</p>'
+                    f'<div style="font-size:1.5rem; font-weight:800; color:{lgb_tier_color}">'
+                    f'{lgb_tier_icon} {lgb_tier.upper()} IMPACT</div>'
+                    f'<div style="color:#94A3B8; font-size:0.85rem; margin-top:4px">'
+                    f'Event Impact Score: <strong style="color:#E2E8F0">{lgb_score:.4f}</strong><br>'
+                    f'Resolution: <strong style="color:#E2E8F0">{lgb_preds["resolution_time_min"]:.1f} mins</strong>'
+                    f'</div></div>',
+                    unsafe_allow_html=True
                 )
 
             # ── Probability bars ────────────────────────────────
-            st.markdown("**Probability Distribution**")
+            st.markdown("**Probability Distribution (Baseline Model)**")
             for tier_lbl in ["Low", "Medium", "High"]:
                 p_val = prob_dict.get(tier_lbl, 0)
                 bar_w = int(p_val * 100)
@@ -590,19 +811,68 @@ elif page == "🔮 Predict & Respond":
 
             st.markdown("---")
 
+            # ── Tactical Map ────────────────────────────────────
+            st.markdown(f"### 🗺️ Incident Response & Cordon Map (Nearest Junction: **{nearest_junc}**)")
+            
+            # Generate and render Leaflet map
+            leaflet_html = generate_leaflet_map(lat, lon, f"{CAUSE_LABELS[cause_key]} at {nearest_junc}", barricades, routes)
+            import html as html_lib
+            escaped_html = html_lib.escape(leaflet_html)
+            iframe_tag = f'<iframe srcdoc="{escaped_html}" style="width:100%; height:400px; border:none; border-radius:12px;"></iframe>'
+            st.html(iframe_tag)
+            
+            st.markdown("---")
+
             # ── Response plan ───────────────────────────────────
             st.markdown("### 🗂️ Operational Response Plan")
 
             r1, r2, r3, r4 = st.columns(4)
             r1.metric("Response Priority", plan_d["response_priority"])
-            r2.metric("Officers Required", f"{plan_d['manpower_min']}-{plan_d['manpower_max']}")
+            r2.metric("Optimized Officers", f"{current_allocation} Deployed", help="Dynamically solved using Google OR-Tools MILP")
             r3.metric("Deploy Within",     plan_d["deployment_time"])
             r4.metric("Diversion",         "Yes" if "Mandatory" in plan_d["diversion_urgency"] else
                                             "Advisory" if "Advisory" in plan_d["diversion_urgency"] else "No")
 
+            # Add cascading metrics detail
+            st.markdown(
+                f'<div class="card" style="background: #111E36; border: 1px solid #1E2D4E;">'
+                f'<p class="section-title">Cascading AI Prediction Breakdown</p>'
+                f'• 🚧 <strong>Requires Road Closure:</strong> {"Yes" if lgb_preds["requires_road_closure"]==1 else "No"} '
+                f'(Probability: {lgb_preds["requires_road_closure_prob"]*100:.1f}%)<br>'
+                f'• ⚠️ <strong>Priority Tier:</strong> {lgb_preds["priority"]} '
+                f'(Probability: {lgb_preds["priority_prob"]*100:.1f}%)<br>'
+                f'• ⏱️ <strong>Estimated Resolution Time:</strong> {lgb_preds["resolution_time_min"]:.1f} minutes ({lgb_preds["resolution_time_min"]/60.0:.1f} hours)<br>'
+                f'• 🎯 <strong>Event Impact Score (EIS):</strong> {lgb_preds["event_impact_score"]:.4f} (Scales from 0 to 1)'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
             st.markdown("**Barricading:** " + plan_d["barricading"])
             st.markdown("**Diversion:** " + plan_d["diversion_urgency"])
             st.markdown(f'*{plan_d["risk_reasoning"]}*')
+
+            # ── OR-Tools Manpower Allocation Table ─────────────
+            st.markdown("#### 👮 Central Dispatch Manpower Distribution (MILP Optimal)")
+            
+            # Format manpower allocations to DataFrame
+            alloc_df = pd.DataFrame([
+                {
+                    "Junction": a["junction"],
+                    "Event Status": "Incident Center" if a["event_id"] == "current" else "Concurrent Event",
+                    "Impact Score (EIS)": f"{a['predicted_eis']:.4f}",
+                    "Manpower Priority": a["allocation_priority"],
+                    "Allocated Officers": f"{a['allocated_officers']} / 10 max"
+                }
+                for a in allocations
+            ])
+            st.dataframe(alloc_df, width="stretch", hide_index=True)
+            
+            # Show utilization progress
+            total_allocated = sum(a["allocated_officers"] for a in allocations)
+            st.markdown(f"**Total Officer Pool Utilization:** `{total_allocated} / 30` Officers Active")
+            st.progress(total_allocated / 30.0)
+
+            st.markdown("---")
 
             # ── Action checklist ────────────────────────────────
             st.markdown("#### ✅ Action Checklist")
@@ -658,13 +928,13 @@ elif page == "📈 Model Performance":
         st.markdown("#### Confusion Matrix - Gradient Boosting")
         img = os.path.join(ASSETS, "confusion_matrix.png")
         if os.path.exists(img):
-            st.image(img, use_container_width=True)
+            st.image(img, width="stretch")
             st.caption("Near-perfect separation across all three tiers.")
     with col_b:
         st.markdown("#### Top Feature Importances")
         img = os.path.join(ASSETS, "feature_importance.png")
         if os.path.exists(img):
-            st.image(img, use_container_width=True)
+            st.image(img, width="stretch")
 
     st.markdown("#### Baseline vs Main Model")
     comp_df = pd.DataFrame({
@@ -678,7 +948,7 @@ elif page == "📈 Model Performance":
         "AUC-ROC": [f"{rf_m.get('auc_roc',0):.4f}",
                     f"{gb_m.get('auc_roc',0):.4f}"],
     })
-    st.dataframe(comp_df, use_container_width=True, hide_index=True)
+    st.dataframe(comp_df, width="stretch", hide_index=True)
 
     st.markdown("---")
     st.markdown("### 🔍 Target Engineering - Transparency Note")
