@@ -168,6 +168,7 @@ class LGBInferenceService:
             closures = sum(group["requires_road_closure"].astype(str).str.lower().isin(["true", "1", "1.0", "yes"]))
             avg_eis = group["eis_scaled"].mean()
             self.corridor_stats[c_key] = {
+                "total": total,
                 "closure_rate": closures / total,
                 "avg_eis": avg_eis
             }
@@ -283,20 +284,22 @@ class LGBInferenceService:
             f["has_end_coords"] = 0.0
             f["spatial_extent_km"] = 0.0
 
-        # Event frequency
-        f["corridor_event_count"] = 1.0
-        f["junction_event_count"] = 1.0
-        f["cause_at_location_count"] = 1.0
-        f["is_repeat_location"] = 1.0
-
         # Lookups
         gh_s = self.geohash_stats.get(geohash_str, {})
+        corr_s = self.corridor_stats.get(corridor, {})
+
+        # Event frequency (using stats fallback)
+        f["corridor_event_count"] = float(corr_s.get("total", 10.0))
+        f["junction_event_count"] = float(gh_s.get("total", 5.0))
+        f["cause_at_location_count"] = float(gh_s.get("total", 5.0)) * 0.2
+        f["is_repeat_location"] = 1.0 if f["junction_event_count"] > 1 else 0.0
+
+        # (Lookups are already retrieved above)
         f["geohash_total_events"] = float(gh_s.get("total", 1.0))
         f["geohash_closure_rate"] = float(gh_s.get("closure_rate", 0.1))
         f["geohash_high_priority_rate"] = float(gh_s.get("high_prio_rate", 0.2))
         f["geohash_avg_eis"] = float(gh_s.get("avg_eis", 0.3))
 
-        corr_s = self.corridor_stats.get(corridor, {})
         f["corridor_closure_rate"] = float(corr_s.get("closure_rate", 0.1))
         f["corridor_avg_eis"] = float(corr_s.get("avg_eis", 0.3))
 
