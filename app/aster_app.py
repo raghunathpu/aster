@@ -305,6 +305,13 @@ def compute_raw_impact_score(event_dict):
 
 
 # ─────────────────────────────────────────────────────────────────
+# Load data & model
+# ─────────────────────────────────────────────────────────────────
+with st.spinner("Loading data, road network, and models…"):
+    df = load_data()
+    gb, enc, le, fnames, fi, metrics, lgb_service, router, manpower_opt = load_model()
+
+# ─────────────────────────────────────────────────────────────────
 # Sidebar
 # ─────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -324,15 +331,19 @@ with st.sidebar:
         "**Accuracy:** 99.9%  |  AUC: 0.9999"
     )
     st.markdown("---")
+    st.markdown("### 📡 Live Feed Simulator")
+    if st.button("🚨 Simulate Live Alert"):
+        try:
+            live_ev = df[df["impact_tier"] == "High"].sample(1).iloc[0]
+            cause_str = str(live_ev['event_cause']).replace('_', ' ').title()
+            st.toast(f"🚨 ALERT: High Impact {cause_str} at {live_ev['corridor']}!", icon="🚨")
+        except Exception as e:
+            st.error(f"Error simulating alert: {e}")
+    st.markdown("---")
     st.caption("Bengaluru Traffic Intelligence · 2024")
 
 
-# ─────────────────────────────────────────────────────────────────
-# Load data & model
-# ─────────────────────────────────────────────────────────────────
-with st.spinner("Loading data, road network, and models…"):
-    df = load_data()
-    gb, enc, le, fnames, fi, metrics, lgb_service, router, manpower_opt = load_model()
+
 
 
 
@@ -435,7 +446,7 @@ into a specific, actionable response plan - in under 2 seconds.
         st.markdown("### Impact Distribution")
         img_path = os.path.join(ASSETS, "eda_impact_dist.png")
         if os.path.exists(img_path):
-            st.image(img_path, width="stretch")
+            st.image(img_path, use_container_width=True)
 
         st.markdown("### The Three-Tier System")
         for tier, color, desc in [
@@ -485,27 +496,27 @@ elif page == "📊 EDA & Insights":
         with c1:
             st.markdown("#### Event Cause Distribution")
             img = os.path.join(ASSETS, "eda_cause_dist.png")
-            if os.path.exists(img): st.image(img, width="stretch")
+            if os.path.exists(img): st.image(img, use_container_width=True)
             st.caption("Vehicle breakdowns dominate (60%). High-impact causes - accidents, construction, events - form a critical minority requiring elevated response.")
         with c2:
             st.markdown("#### Cause x Impact Tier Heatmap")
             img = os.path.join(ASSETS, "eda_heatmap.png")
-            if os.path.exists(img): st.image(img, width="stretch")
+            if os.path.exists(img): st.image(img, use_container_width=True)
             st.caption("Accidents, construction and public events show the highest High-impact concentration. Vehicle breakdowns generate volume but are mostly Medium due to corridor assignment.")
 
         st.markdown("#### Impact Tier Distribution")
         img = os.path.join(ASSETS, "eda_impact_dist.png")
-        if os.path.exists(img): st.image(img, width="stretch")
+        if os.path.exists(img): st.image(img, use_container_width=True)
 
     with tab2:
         st.markdown("#### Monthly Event Volume Trend")
         img = os.path.join(ASSETS, "eda_monthly_trend.png")
-        if os.path.exists(img): st.image(img, width="stretch")
+        if os.path.exists(img): st.image(img, use_container_width=True)
         st.caption("March 2024 saw the highest event volume (1,929). Planned events peak in construction season (Nov-Mar).")
 
         st.markdown("#### Hourly Distribution (IST)")
         img = os.path.join(ASSETS, "eda_hourly.png")
-        if os.path.exists(img): st.image(img, width="stretch")
+        if os.path.exists(img): st.image(img, use_container_width=True)
         st.caption("High overnight reporting (0-5 AM) reflects patrol-officer logging of overnight incidents at shift start. True operational peaks align with morning (7-10 AM) and evening (5-9 PM) commute windows.")
 
         col_a, col_b = st.columns(2)
@@ -533,19 +544,19 @@ elif page == "📊 EDA & Insights":
         with col_b:
             st.markdown("**Event Resolution Time**")
             img = os.path.join(ASSETS, "eda_duration.png")
-            if os.path.exists(img): st.image(img, width="stretch")
+            if os.path.exists(img): st.image(img, use_container_width=True)
 
     with tab3:
         c1, c2 = st.columns(2)
         with c1:
             st.markdown("#### Top Corridors by Volume")
             img = os.path.join(ASSETS, "eda_corridors.png")
-            if os.path.exists(img): st.image(img, width="stretch")
+            if os.path.exists(img): st.image(img, use_container_width=True)
             st.caption("Mysore Road leads with 743 events. All named corridors are classified High priority - a key signal in ASTER's scoring.")
         with c2:
             st.markdown("#### Zone-Wise Event Density")
             img = os.path.join(ASSETS, "eda_zones.png")
-            if os.path.exists(img): st.image(img, width="stretch")
+            if os.path.exists(img): st.image(img, use_container_width=True)
             st.caption("Central Zone 2 (MG Road, Brigade area) and West Zone 1 (Mysore Road corridor) show the highest combined event density.")
 
         st.markdown("#### Hotspot Police Stations (top 15)")
@@ -563,7 +574,7 @@ elif page == "📊 EDA & Insights":
                 "road_closures": "Road Closures",
                 "high_%": "High Impact %",
             }),
-            width="stretch", hide_index=True
+            use_container_width=True, hide_index=True
         )
 
     with tab4:
@@ -668,7 +679,7 @@ elif page == "🔮 Predict & Respond":
             veh_type     = p.get("veh_type", veh_type)
             del st.session_state["preset"]
 
-        predict_btn = st.button("🚀  Analyse Event & Generate Response Plan", width="stretch")
+        predict_btn = st.button("🚀  Analyse Event & Generate Response Plan", use_container_width=True)
 
     # ── Right panel - results ─────────────────────────────────────
     with col_result:
@@ -865,7 +876,7 @@ elif page == "🔮 Predict & Respond":
                 }
                 for a in allocations
             ])
-            st.dataframe(alloc_df, width="stretch", hide_index=True)
+            st.dataframe(alloc_df, use_container_width=True, hide_index=True)
             
             # Show utilization progress
             total_allocated = sum(a["allocated_officers"] for a in allocations)
@@ -928,13 +939,13 @@ elif page == "📈 Model Performance":
         st.markdown("#### Confusion Matrix - Gradient Boosting")
         img = os.path.join(ASSETS, "confusion_matrix.png")
         if os.path.exists(img):
-            st.image(img, width="stretch")
+            st.image(img, use_container_width=True)
             st.caption("Near-perfect separation across all three tiers.")
     with col_b:
         st.markdown("#### Top Feature Importances")
         img = os.path.join(ASSETS, "feature_importance.png")
         if os.path.exists(img):
-            st.image(img, width="stretch")
+            st.image(img, use_container_width=True)
 
     st.markdown("#### Baseline vs Main Model")
     comp_df = pd.DataFrame({
@@ -948,7 +959,7 @@ elif page == "📈 Model Performance":
         "AUC-ROC": [f"{rf_m.get('auc_roc',0):.4f}",
                     f"{gb_m.get('auc_roc',0):.4f}"],
     })
-    st.dataframe(comp_df, width="stretch", hide_index=True)
+    st.dataframe(comp_df, use_container_width=True, hide_index=True)
 
     st.markdown("---")
     st.markdown("### 🔍 Target Engineering - Transparency Note")
