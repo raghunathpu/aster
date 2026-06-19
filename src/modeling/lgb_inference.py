@@ -9,7 +9,7 @@ import sys
 import types
 import numpy as np
 import pandas as pd
-import geohash as gh
+import geohash2 as gh
 import math
 from pathlib import Path
 
