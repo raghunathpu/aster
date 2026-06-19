@@ -37,9 +37,8 @@ By exploring this map, you can visually confirm the key operational findings—s
 If you haven't already started the ASTER Streamlit server, you can do so by running the following command from the project workspace:
 
 ```bash
-cd /home/uchiha/Documents/PROJECTS/ML
-source gridvision/.venv/bin/activate
-streamlit run aster/app/aster_app.py
+cd aster
+streamlit run app/aster_app.py
 ```
 
 Once the server is running, navigate to the local URL (usually `http://localhost:8501`) and the map will be the first interactive element you see below the top-level KPIs on the **🏠 Overview** page.
