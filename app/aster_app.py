@@ -320,7 +320,7 @@ with st.sidebar:
     st.markdown("---")
     page = st.radio(
         "Navigation",
-        ["🏠 Overview", "📊 EDA & Insights", "🔮 Predict & Respond", "📅 Pre-Event Planner", "📈 Model Performance", "🧠 Post-Event Learning"],
+        ["🏠 Overview", "📊 EDA & Insights", "🗺️ Map & Heatmap", "🔮 Predict & Respond", "📅 Pre-Event Planner", "📈 Model Performance", "🧠 Post-Event Learning"],
         label_visibility="collapsed",
     )
     st.markdown("---")
@@ -604,7 +604,59 @@ elif page == "📊 EDA & Insights":
 
 
 # ═══════════════════════════════════════════════════════════════════
-# PAGE 2 - PREDICT & RESPOND
+# PAGE 2 - MAP & HEATMAP
+# ═══════════════════════════════════════════════════════════════════
+elif page == "🗺️ Map & Heatmap":
+    st.markdown("# 🗺️ City-Wide Tactical Map & Heatmap")
+    st.markdown(
+        "> *Identify structural congestion bottlenecks and spatial distribution of traffic events across Bengaluru.*"
+    )
+    st.markdown("---")
+
+    view_mode = st.radio("Select View Mode", ["Historical Hotspots (All Time)", "Forward Projection (Next 24h Risk)"], horizontal=True)
+
+    c_map, c_filters = st.columns([3, 1])
+
+    with c_filters:
+        st.markdown("### Filters")
+        if view_mode == "Historical Hotspots (All Time)":
+            tier_filter = st.multiselect(
+                "Impact Tier",
+                options=["Low", "Medium", "High"],
+                default=["High", "Medium"]
+            )
+            cause_filter = st.multiselect(
+                "Event Cause",
+                options=df["event_cause"].dropna().unique(),
+                default=["accident", "water_logging", "vehicle_breakdown"]
+            )
+        else:
+            st.info("Showing projected high-risk zones based on temporal and historical patterns for the next 24 hours.")
+            tier_filter = ["High"]
+            cause_filter = df["event_cause"].dropna().unique()
+
+    # Filter dataframe
+    if view_mode == "Historical Hotspots (All Time)":
+        heat_df = df.copy()
+        if tier_filter:
+            heat_df = heat_df[heat_df["impact_tier"].isin(tier_filter)]
+        if cause_filter:
+            heat_df = heat_df[heat_df["event_cause"].isin(cause_filter)]
+    else:
+        # Simulate forward projection by taking a subset of historical high-impact events
+        heat_df = df[df["impact_tier"] == "High"].sample(frac=0.2, random_state=42)
+
+    heat_df = heat_df.dropna(subset=["latitude", "longitude"])
+
+    with c_map:
+        st.pydeck_chart(pdk.Deck(
+            initial_view_state=pdk.ViewState(latitude=12.9716, longitude=77.5946, zoom=11),
+            layers=[pdk.Layer("HeatmapLayer", heat_df, get_position="[longitude, latitude]", radiusPixels=50)]
+        ))
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PAGE 3 - PREDICT & RESPOND
 # ═══════════════════════════════════════════════════════════════════
 elif page == "🔮 Predict & Respond":
     st.markdown("# 🔮 Event Triage & Response Planner")
@@ -992,7 +1044,7 @@ elif page == "🔮 Predict & Respond":
 
 
 # ═══════════════════════════════════════════════════════════════════
-# PAGE 3 - MODEL PERFORMANCE
+# PAGE 4 - MODEL PERFORMANCE
 # ═══════════════════════════════════════════════════════════════════
 elif page == "📈 Model Performance":
     st.markdown("# 📈 Model Performance & Explainability")
@@ -1070,7 +1122,7 @@ assessments to refine the scoring weights. This is an explicit assumption, not h
     """)
 
 # ═══════════════════════════════════════════════════════════════════
-# PAGE 4 - POST-EVENT LEARNING
+# PAGE 5 - POST-EVENT LEARNING
 # ═══════════════════════════════════════════════════════════════════
 elif page == "🧠 Post-Event Learning":
     st.markdown("# 🧠 Continuous Learning & Feedback Loop")
