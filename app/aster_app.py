@@ -381,37 +381,21 @@ if page == "🏠 Overview":
     
     # Filter valid coordinates and prepare map data
     map_df = df.dropna(subset=['latitude', 'longitude']).copy()
-    
-    def get_color(tier):
-        if tier == 'High': return [239, 68, 68, 200]
-        if tier == 'Medium': return [245, 158, 11, 200]
-        return [34, 197, 94, 200]
-        
-    map_df['color'] = map_df['impact_tier'].apply(get_color)
-    map_df['cause_label'] = map_df['event_cause'].apply(lambda x: CAUSE_LABELS.get(x, x.replace('_', ' ').title()))
+    map_df['impact_score'] = map_df['impact_tier'].map({'High': 3, 'Medium': 2, 'Low': 1})
     
     view_state = pdk.ViewState(latitude=12.9716, longitude=77.5946, zoom=10.5, pitch=45)
     
     layer = pdk.Layer(
-        'ScatterplotLayer',
+        'HeatmapLayer',
         data=map_df,
         get_position='[longitude, latitude]',
-        get_color='color',
-        get_radius=150,
-        pickable=True,
-        opacity=0.8,
-        stroked=True,
-        filled=True,
-        radius_scale=1,
-        radius_min_pixels=3,
-        radius_max_pixels=10,
-        line_width_min_pixels=0.5,
+        get_weight="impact_score",
+        radiusPixels=60,
     )
     
     st.pydeck_chart(pdk.Deck(
         initial_view_state=view_state,
-        layers=[layer],
-        tooltip={"html": "<b>Cause:</b> {cause_label}<br/><b>Corridor:</b> {corridor}<br/><b>Impact:</b> {impact_tier}", "style": {"backgroundColor": "#1E2D4E", "color": "#E2E8F0", "border": "1px solid #2D4070"}}
+        layers=[layer]
     ))
 
     st.markdown("---")
