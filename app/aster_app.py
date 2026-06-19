@@ -663,6 +663,11 @@ elif page == "🔮 Predict & Respond":
             veh_type     = p.get("veh_type", veh_type)
             del st.session_state["preset"]
 
+        st.markdown("---")
+        st.markdown("### 🌦️ Environmental Context")
+        apply_monsoon = st.checkbox("Enable Monsoon Risk Multiplier (June - Sept)", value=False)
+        st.caption("Increases predicted severity to account for water logging and lower road capacities.")
+
         predict_btn = st.button("🚀  Analyse Event & Generate Response Plan", use_container_width=True)
 
     # ── Right panel - results ─────────────────────────────────────
@@ -715,6 +720,10 @@ elif page == "🔮 Predict & Respond":
                     "start_datetime": now_utc
                 }
                 lgb_preds = lgb_service.predict(lgb_event)
+                if apply_monsoon:
+                    month = now_utc.month
+                    multiplier = 1.3 if month in [6, 7, 8, 9] else 1.15
+                    lgb_preds["event_impact_score"] = min(lgb_preds["event_impact_score"] * multiplier, 1.0)
 
                 # Map coordinates to graph node
                 nearest_junc = router.find_nearest_junction(lat, lon)
@@ -731,12 +740,30 @@ elif page == "🔮 Predict & Respond":
                     routes = router.get_alternative_routes("RichmondCircle", "CorporationCircle", blocked_node=nearest_junc)
 
                 # 4. Manpower optimization
-                opt_events = [
-                    {"event_id": "1", "junction": "Mekhri Circle", "predicted_eis": 0.82, "predicted_priority": 1, "requires_road_closure": 1},
-                    {"event_id": "2", "junction": "Silk Board Junction", "predicted_eis": 0.68, "predicted_priority": 1, "requires_road_closure": 0},
-                    {"event_id": "3", "junction": "Ayyappa Temple", "predicted_eis": 0.35, "predicted_priority": 0, "requires_road_closure": 0},
-                    {"event_id": "current", "junction": nearest_junc, "predicted_eis": lgb_preds["event_impact_score"], "predicted_priority": lgb_preds["priority_encoded"], "requires_road_closure": lgb_preds["requires_road_closure"]}
-                ]
+                # Get 3 concurrent events from recent historical data to simulate load
+                concurrent = df.sample(3)
+                opt_events = []
+                for i, (_, r) in enumerate(concurrent.iterrows()):
+                    eis_val = float(r.get("impact_score", 3)) / 6.0
+                    prio = 1 if r.get("priority", "Low") == "High" else 0
+                    closure = 1 if str(r.get("requires_road_closure", False)).lower() in ["true", "1", "yes"] else 0
+                    j_name = r.get("junction")
+                    if pd.isna(j_name) or str(j_name).strip() == "":
+                        j_name = r.get("corridor", "Unknown")
+                    opt_events.append({
+                        "event_id": f"concurrent_{i}", 
+                        "junction": j_name, 
+                        "predicted_eis": eis_val, 
+                        "predicted_priority": prio, 
+                        "requires_road_closure": closure
+                    })
+                opt_events.append({
+                    "event_id": "current", 
+                    "junction": nearest_junc, 
+                    "predicted_eis": lgb_preds["event_impact_score"], 
+                    "predicted_priority": lgb_preds["priority_encoded"], 
+                    "requires_road_closure": lgb_preds["requires_road_closure"]
+                })
                 allocations = manpower_opt.optimize(opt_events)
                 
                 # Retrieve our incident's allocation
