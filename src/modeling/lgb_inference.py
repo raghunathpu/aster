@@ -93,7 +93,9 @@ class LGBInferenceService:
         if models_dir is None:
             models_dir = os.path.join(ROOT, "models", "lgb")
         if dataset_path is None:
-            dataset_path = os.path.join(ROOT, "models", "processed_dataset.csv")
+            p_dataset = os.path.join(ROOT, "models", "processed_dataset.csv")
+            r_dataset = os.path.join(ROOT, "data", "bengaluru_traffic_events.csv")
+            dataset_path = p_dataset if os.path.exists(p_dataset) else r_dataset
 
         # Load LightGBM model pickles
         try:
@@ -271,8 +273,15 @@ class LGBInferenceService:
         f["dist_from_center_km"] = math.sqrt(
             ((lat - center_lat) * 111.0) ** 2 + ((lon - center_lon) * 85.0) ** 2
         )
-        f["has_end_coords"] = 0.0
-        f["spatial_extent_km"] = 0.0
+        end_lat = event_data.get("endlatitude")
+        end_lon = event_data.get("endlongitude")
+        if end_lat is not None and end_lon is not None and not pd.isna(end_lat) and not pd.isna(end_lon):
+            f["has_end_coords"] = 1.0
+            from geopy.distance import geodesic
+            f["spatial_extent_km"] = geodesic((lat, lon), (end_lat, end_lon)).kilometers
+        else:
+            f["has_end_coords"] = 0.0
+            f["spatial_extent_km"] = 0.0
 
         # Event frequency
         f["corridor_event_count"] = 1.0
