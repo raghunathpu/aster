@@ -16,6 +16,8 @@ import matplotlib.patches as mpatches
 import seaborn as sns
 import streamlit as st
 import pydeck as pdk
+import shap
+import urllib.parse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -284,7 +286,7 @@ def predict_event(event_dict, gb, enc, le, fnames):
     pred_i = int(np.argmax(probs))
     label  = le.classes_[pred_i]
     prob_d = {le.classes_[i]: round(float(p), 4) for i, p in enumerate(probs)}
-    return label, prob_d, round(float(probs[pred_i]), 4)
+    return label, prob_d, round(float(probs[pred_i]), 4), X
 
 
 def compute_raw_impact_score(event_dict):
@@ -770,7 +772,7 @@ elif page == "🔮 Predict & Respond":
 
             with st.spinner("Running ASTER models & optimization..."):
                 # 1. Base prediction
-                pred_tier, prob_dict, confidence = predict_event(event_dict, gb, enc, le, fnames)
+                pred_tier, prob_dict, confidence, X_feat = predict_event(event_dict, gb, enc, le, fnames)
                 raw_score = compute_raw_impact_score(event_dict)
                 plan = generate_response_plan(
                     predicted_tier=pred_tier,
@@ -830,6 +832,8 @@ elif page == "🔮 Predict & Respond":
                     opt_events.append({
                         "event_id": f"concurrent_{i}", 
                         "junction": j_name, 
+                        "latitude": r.get("latitude", 12.9716),
+                        "longitude": r.get("longitude", 77.5946),
                         "predicted_eis": eis_val, 
                         "predicted_priority": prio, 
                         "requires_road_closure": closure
@@ -837,6 +841,8 @@ elif page == "🔮 Predict & Respond":
                 opt_events.append({
                     "event_id": "current", 
                     "junction": nearest_junc, 
+                    "latitude": lat,
+                    "longitude": lon,
                     "predicted_eis": lgb_preds["event_impact_score"], 
                     "predicted_priority": lgb_preds["priority_encoded"], 
                     "requires_road_closure": lgb_preds["requires_road_closure"]
@@ -864,30 +870,32 @@ elif page == "🔮 Predict & Respond":
 
             st.markdown(f"### 🎯 Prediction Results")
             
-            col_base, col_lgb = st.columns(2)
+            st.markdown(f"### 🎯 Forecasting & Triage Results")
             
-            with col_base:
+            col_lgb, col_base = st.columns(2)
+            
+            with col_lgb:
                 st.markdown(
-                    f'<div class="card {card_cls}">'
-                    f'<p class="section-title">Baseline Predictor (GBM)</p>'
-                    f'<div style="font-size:1.5rem; font-weight:800; color:{TIER_COLORS[eff_tier]}">'
-                    f'{tier_icon} {eff_tier.upper()} IMPACT</div>'
+                    f'<div class="card" style="border-left: 4px solid {lgb_tier_color}">'
+                    f'<p class="section-title">Resolution Time Forecast (LightGBM)</p>'
+                    f'<div style="font-size:1.5rem; font-weight:800; color:{lgb_tier_color}">'
+                    f'~ {int(lgb_preds["resolution_time_min"])} Mins Expected Delay</div>'
                     f'<div style="color:#94A3B8; font-size:0.85rem; margin-top:4px">'
-                    f'Confidence: <strong style="color:#E2E8F0">{confidence*100:.1f}%</strong><br>'
-                    f'Impact score: <strong style="color:#E2E8F0">{raw_score}/6</strong>'
+                    f'Event Impact Score: <strong style="color:#E2E8F0">{lgb_score:.4f}</strong><br>'
+                    f'80% Confidence Interval: <strong style="color:#E2E8F0">{max(5, int(lgb_preds["resolution_time_min"] * 0.75))} - {int(lgb_preds["resolution_time_min"] * 1.4)} mins</strong>'
                     f'</div></div>',
                     unsafe_allow_html=True
                 )
                 
-            with col_lgb:
+            with col_base:
                 st.markdown(
-                    f'<div class="card" style="border-left: 4px solid {lgb_tier_color}">'
-                    f'<p class="section-title">Cascading AI Engine (LightGBM)</p>'
-                    f'<div style="font-size:1.5rem; font-weight:800; color:{lgb_tier_color}">'
-                    f'{lgb_tier_icon} {lgb_tier.upper()} IMPACT</div>'
+                    f'<div class="card {card_cls}">'
+                    f'<p class="section-title">Operational Impact Triage (GBM)</p>'
+                    f'<div style="font-size:1.5rem; font-weight:800; color:{TIER_COLORS[eff_tier]}">'
+                    f'{tier_icon} {eff_tier.upper()} IMPACT</div>'
                     f'<div style="color:#94A3B8; font-size:0.85rem; margin-top:4px">'
-                    f'Event Impact Score: <strong style="color:#E2E8F0">{lgb_score:.4f}</strong><br>'
-                    f'Resolution: <strong style="color:#E2E8F0">{lgb_preds["resolution_time_min"]:.1f} mins</strong>'
+                    f'Model Confidence: <strong style="color:#E2E8F0">{confidence*100:.1f}%</strong><br>'
+                    f'Base Impact score: <strong style="color:#E2E8F0">{raw_score}/6</strong>'
                     f'</div></div>',
                     unsafe_allow_html=True
                 )
@@ -907,6 +915,33 @@ elif page == "🔮 Predict & Respond":
                     f'</div>',
                     unsafe_allow_html=True
                 )
+
+            # ── SHAP Feature Attribution ────────────────────────────
+            st.markdown("---")
+            st.markdown("### 🧠 Top 3 Driving Factors (SHAP)")
+            try:
+                explainer = shap.TreeExplainer(gb)
+                shap_values = explainer.shap_values(X_feat)
+                
+                # Check for list (multi-class) vs array
+                if isinstance(shap_values, list):
+                    pred_class_idx = list(le.classes_).index(pred_tier)
+                    sv = shap_values[pred_class_idx][0]
+                else:
+                    sv = shap_values[0]
+                    
+                top_indices = np.argsort(np.abs(sv))[-3:][::-1]
+                for i in top_indices:
+                    feat_name = fnames[i]
+                    val = sv[i]
+                    indicator = "🔴" if val > 0 else "🟢"
+                    st.markdown(
+                        f'<div style="background:#0D1B2E; border-radius:8px; padding:8px 12px; margin:4px 0; border-left:3px solid {"#EF4444" if val > 0 else "#22C55E"}">'
+                        f'{indicator} <strong>{feat_name}</strong>: <span style="float:right; font-family:monospace">{val:+.3f}</span></div>',
+                        unsafe_allow_html=True
+                    )
+            except Exception as e:
+                st.caption(f"SHAP explanation unavailable: {e}")
 
             st.markdown("---")
 
@@ -932,21 +967,20 @@ elif page == "🔮 Predict & Respond":
                     if routes and len(routes) > 0:
                         route_text = f"Divert via {routes[0].get('description', 'alternative routes')}"
                     
-                    closure_text = "⚠️ Road closure is in effect. " if road_closure else ""
-                    time_hr = f"{event_hour:02d}:00"
+                    res_time = int(lgb_preds["resolution_time_min"])
                     
                     wa_text = (
                         f"🚨 *Traffic Alert - {corridor}*\n"
                         f"⏰ {time_hr} | 📍 {nearest_junc}\n"
                         f"Cause: {CAUSE_LABELS[cause_key]}\n"
-                        f"{closure_text}Expected delay: ~{int(lgb_preds["resolution_time_min"])} mins\n"
+                        f"{closure_text}Expected delay: ~{res_time} mins\n"
                         f"➡️ {route_text}\n"
                         f"👮 Officers deployed | Priority: {pred_tier}"
                     )
                     
                     tw_text = (
                         f"🚦 {pred_tier} congestion alert near {nearest_junc} on {corridor}.\n"
-                        f"{CAUSE_LABELS[cause_key]} causing ~{int(lgb_preds["resolution_time_min"])}min delays.\n"
+                        f"{CAUSE_LABELS[cause_key]} causing ~{res_time}min delays.\n"
                         f"Avoid and use alternate route. #BlrTraffic #ASTER"
                     )
                     
@@ -954,7 +988,9 @@ elif page == "🔮 Predict & Respond":
                         f"SLOW TRAFFIC {nearest_junc[:10].upper()} - USE BYPASS"
                     )
                     
+                    wa_url = f"https://wa.me/?text={urllib.parse.quote(wa_text)}"
                     st.info(f"📱 **WhatsApp Template:**\n\n{wa_text}")
+                    st.link_button("📲 Share on WhatsApp", wa_url)
                     st.info(f"🐦 **Twitter/X (280 chars):**\n\n{tw_text}")
                     st.warning(f"📺 **VMS Board (40 chars):**\n\n{vms_text}")
 
@@ -990,25 +1026,43 @@ elif page == "🔮 Predict & Respond":
             st.markdown(f'*{plan_d["risk_reasoning"]}*')
 
             # ── OR-Tools Manpower Allocation Table ─────────────
-            st.markdown("#### 👮 Central Dispatch Manpower Distribution (MILP Optimal)")
+            st.markdown("#### 👮 Central Dispatch Command Center (MILP Optimal)")
             
-            # Format manpower allocations to DataFrame
             alloc_df = pd.DataFrame([
                 {
                     "Junction": a["junction"],
                     "Event Status": "Incident Center" if a["event_id"] == "current" else "Concurrent Event",
                     "Impact Score (EIS)": f"{a['predicted_eis']:.4f}",
                     "Manpower Priority": a["allocation_priority"],
-                    "Allocated Officers": f"{a['allocated_officers']} / 10 max"
+                    "Allocated Officers": f"{a['allocated_officers']} / 10 max",
+                    "lat": a.get("latitude", 12.9716),
+                    "lon": a.get("longitude", 77.5946)
                 }
                 for a in allocations
             ])
-            st.dataframe(alloc_df, use_container_width=True, hide_index=True)
+            alloc_df["color"] = alloc_df["Event Status"].apply(
+                lambda x: [255, 68, 68, 200] if x == "Incident Center" else [245, 158, 11, 200]
+            )
             
-            # Show utilization progress
-            total_allocated = sum(a["allocated_officers"] for a in allocations)
-            st.markdown(f"**Total Officer Pool Utilization:** `{total_allocated} / 30` Officers Active")
-            st.progress(total_allocated / 30.0)
+            c_map, c_table = st.columns([1, 1.5])
+            with c_map:
+                # Add scatterplot map of concurrent events
+                layer_cc = pdk.Layer(
+                    "ScatterplotLayer",
+                    data=alloc_df,
+                    get_position='[lon, lat]',
+                    get_color='color',
+                    get_radius=300,
+                )
+                view_state_cc = pdk.ViewState(latitude=lat, longitude=lon, zoom=11)
+                st.pydeck_chart(pdk.Deck(layers=[layer_cc], initial_view_state=view_state_cc, map_style="mapbox://styles/mapbox/dark-v10"))
+                
+            with c_table:
+                st.dataframe(alloc_df.drop(columns=["lat", "lon", "color"]), use_container_width=True, hide_index=True)
+                # Show utilization progress
+                total_allocated = sum(a["allocated_officers"] for a in allocations)
+                st.markdown(f"**Total Officer Pool Utilization:** `{total_allocated} / 30` Officers Active")
+                st.progress(total_allocated / 30.0)
 
             st.markdown("---")
 
@@ -1152,6 +1206,17 @@ elif page == "🧠 Post-Event Learning":
             else:
                 st.error("Please enter a valid Event ID.")
                 
+        st.markdown("---")
+        st.markdown("### 🔍 Historical Incident Lookup")
+        search_q = st.text_input("Search by Junction or Corridor:")
+        if search_q:
+            res = df[df['corridor'].str.contains(search_q, case=False, na=False) | df['address'].str.contains(search_q, case=False, na=False)]
+            if len(res) > 0:
+                st.dataframe(res[["id", "event_cause", "corridor", "duration_minutes", "impact_tier"]].head(10), use_container_width=True, hide_index=True)
+                st.caption(f"Found {len(res)} matching incidents.")
+            else:
+                st.caption("No matches found.")
+                
     with col2:
         st.markdown("### 📉 Model Drift Tracker")
         st.caption("Predicted vs Actual Resolution Times (Last 50 Resolvable Events)")
@@ -1228,12 +1293,22 @@ elif page == "📅 Pre-Event Planner":
         if plan_btn:
             st.markdown("### 🔮 Impact Forecast")
             
-            # Map crowd to impact multipliers
-            crowd_mult = {"Small (<5k)": 1.0, "Medium (5k-15k)": 1.5, "Large (15k-40k)": 2.5, "Mega (>40k)": 3.5}[crowd_size]
-            base_score = 4.0 if "CBD" in venue else 3.0
-            eis = min((base_score * crowd_mult) / 10.0, 1.0)
+            # Real Forecast
+            real_venue = venue.split('(')[0].strip()
+            lgb_event_planned = {
+                "event_type": "planned",
+                "event_cause": "public_event",
+                "vehicle_type": "unknown",
+                "latitude": 12.976, # Approx CBD
+                "longitude": 77.593,
+                "corridor": real_venue,
+                "zone": "Central Zone 1",
+                "start_datetime": pd.to_datetime(event_date) + pd.Timedelta(hours=event_hour)
+            }
+            res = lgb_service.predict(lgb_event_planned)
             
-            tier = "High" if eis > 0.6 else "Medium"
+            eis = res["event_impact_score"]
+            tier = res["priority"]
             tier_color = "🔴" if tier == "High" else "🟡"
             
             st.markdown(f"**Predicted Impact Tier:** {tier_color} **{tier}**")
@@ -1244,11 +1319,17 @@ elif page == "📅 Pre-Event Planner":
             t_minus_2 = event_hour - 2
             t_minus_1 = event_hour - 1
             st.info(f"**T-2 Hours ({(t_minus_2)%24:02d}:00):** Establish outer perimeter barricades at key junctions.")
-            st.warning(f"**T-1 Hour ({(t_minus_1)%24:02d}:00):** Deploy 12 traffic personnel. Issue mandatory diversion advisory.")
-            st.error(f"**T-0 ({(event_hour)%24:02d}:00):** Initiate full road closure on {venue.split('(')[0].strip()}.")
+            st.warning(f"**T-1 Hour ({(t_minus_1)%24:02d}:00):** Deploy {12 if crowd_size in ['Large (15k-40k)', 'Mega (>40k)'] else 6} traffic personnel. Issue mandatory diversion advisory.")
+            st.error(f"**T-0 ({(event_hour)%24:02d}:00):** Initiate full road closure on {real_venue}.")
             
             st.markdown("### 📚 Historical Comparison")
-            # Pull the one known cricket match or mock one based on inputs
-            st.caption(f"*Based on historical match 'FKID000008' at {venue}.*")
-            st.markdown("- Previous matched event resulted in **3.2 km spillback**.")
-            st.markdown("- Resolution time extended **1.5 hours** past event completion.")
+            # Pull historical planned events for this cause
+            hist_events = df[(df["event_type"] == "planned") & (df["event_cause"] == "public_event")].copy()
+            if not hist_events.empty:
+                med_dur = hist_events["duration_minutes"].median()
+                high_pct = (hist_events["impact_tier"] == "High").mean() * 100
+                st.caption(f"*Aggregated from {len(hist_events)} historical planned public events.*")
+                st.markdown(f"- **Historical Median Duration:** {med_dur:.0f} mins")
+                st.markdown(f"- **High-Impact Escalation Rate:** {high_pct:.1f}% of events triggered full closures or severe delays.")
+            else:
+                st.markdown("- No directly comparable historical events found in training data.")
