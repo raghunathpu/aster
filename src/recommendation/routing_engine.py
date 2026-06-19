@@ -220,7 +220,7 @@ class RoutingEngine:
                     "path_coordinates": path_coords,
                     "travel_time_min": round(total_time_min, 2),
                     "distance_m": int(dist),
-                    "congestion_index": 0.05,
+                    "congestion_index": round(min(1.0, travel_time_sec / 1800.0), 2),
                     "description": f"Alternative Route {i + 1}"
                 })
         except (nx.NetworkXNoPath, nx.NetworkXError):
