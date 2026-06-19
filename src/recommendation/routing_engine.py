@@ -21,20 +21,26 @@ class RoutingEngine:
             except Exception as e:
                 print(f"Error loading graph: {e}")
         
-        # Fallback dictionary of junctions if graph is missing / loading fails
+        # Extended fallback dictionary of 50+ junctions for Bengaluru if graph is missing
         self.junctions = {
-            "Majestic": (12.9779, 77.5724),
-            "Townhall": (12.9631, 77.5855),
-            "MekhriCircle": (13.0143, 77.5831),
-            "SilkBoard": (12.9176, 77.6244),
-            "QueensCircle": (12.9764, 77.5978),
-            "TrinityCircle": (12.9732, 77.6212),
-            "RichmondCircle": (12.9602, 77.5975),
-            "HebbalFlyover": (13.0358, 77.5970),
-            "DairyCircle": (12.9427, 77.6047),
-            "Banashankari": (12.9154, 77.5738),
-            "Domlur": (12.9610, 77.6387),
-            "CorporationCircle": (12.9678, 77.5880)
+            "Majestic": (12.9779, 77.5724), "Townhall": (12.9631, 77.5855), "MekhriCircle": (13.0143, 77.5831),
+            "SilkBoard": (12.9176, 77.6244), "QueensCircle": (12.9764, 77.5978), "TrinityCircle": (12.9732, 77.6212),
+            "RichmondCircle": (12.9602, 77.5975), "HebbalFlyover": (13.0358, 77.5970), "DairyCircle": (12.9427, 77.6047),
+            "Banashankari": (12.9154, 77.5738), "Domlur": (12.9610, 77.6387), "CorporationCircle": (12.9678, 77.5880),
+            "KR_Puram": (13.0084, 77.6835), "TinFactory": (12.9942, 77.6659), "Marathahalli": (12.9569, 77.7011),
+            "Bellandur": (12.9304, 77.6784), "Agara": (12.9234, 77.6481), "Madiwala": (12.9226, 77.6174),
+            "BTM_Layout": (12.9166, 77.6101), "Jayadeva": (12.9175, 77.5985), "SouthEndCircle": (12.9348, 77.5794),
+            "NationalCollege": (12.9501, 77.5735), "MinervaCircle": (12.9548, 77.5815), "HudsonCircle": (12.9667, 77.5866),
+            "Kashivishwanatha": (12.9735, 77.5831), "AnandRaoCircle": (12.9795, 77.5768), "SivanandaCircle": (12.9866, 77.5814),
+            "WindsorManor": (12.9928, 77.5838), "CauveryTheater": (13.0035, 77.5843), "SanjaynagarCross": (13.0245, 77.5855),
+            "Kempapura": (13.0482, 77.5954), "EsteemMall": (13.0531, 77.5932), "Yelahanka": (13.1007, 77.5963),
+            "Goraguntepalya": (13.0312, 77.5447), "Yeshwanthpur": (13.0238, 77.5518), "Navrang": (12.9984, 77.5524),
+            "Rajajinagar1stBlock": (12.9912, 77.5546), "SujathaTheater": (12.9782, 77.5555), "MagadiRoadTolgate": (12.9765, 77.5458),
+            "Vijayanagar": (12.9715, 77.5358), "Attiguppe": (12.9613, 77.5332), "Nayandahalli": (12.9431, 77.5255),
+            "RajarajeshwariNagar": (12.9274, 77.5156), "Kengeri": (12.9069, 77.4812), "Konanakunte": (12.8856, 77.5732),
+            "Yelachenahalli": (12.9015, 77.5721), "JP_Nagar_15th_Cross": (12.9113, 77.5835), "Jayanagar_4th_Block": (12.9284, 77.5832),
+            "SagarApollo": (12.9355, 77.5991), "Nimhans": (12.9392, 77.5954), "WilsonGarden": (12.9482, 77.5958),
+            "ShoolayCircle": (12.9664, 77.6052), "VellaraJunction": (12.9634, 77.6074), "AnilKumbleCircle": (12.9772, 77.6015)
         }
 
     def find_nearest_junction(self, lat: float, lon: float) -> str:
@@ -77,9 +83,13 @@ class RoutingEngine:
         if self.graph is None or not self.graph.has_node(event_junction):
             # Fallback mock barricades based on nearby nodes
             neighbors_map = {
-                "QueensCircle": ["RichmondCircle", "TrinityCircle", "MekhriCircle"],
-                "Townhall": ["RichmondCircle", "CorporationCircle"],
-                "SilkBoard": ["DairyCircle", "Banashankari", "Domlur"]
+                "QueensCircle": ["RichmondCircle", "TrinityCircle", "MekhriCircle", "AnilKumbleCircle"],
+                "Townhall": ["RichmondCircle", "CorporationCircle", "HudsonCircle", "Kashivishwanatha"],
+                "SilkBoard": ["DairyCircle", "Banashankari", "Domlur", "Agara", "BTM_Layout"],
+                "MekhriCircle": ["CauveryTheater", "SanjaynagarCross", "WindsorManor", "HebbalFlyover"],
+                "Marathahalli": ["Bellandur", "TinFactory", "KR_Puram"],
+                "Majestic": ["AnandRaoCircle", "SujathaTheater", "Kashivishwanatha"],
+                "HebbalFlyover": ["EsteemMall", "Kempapura", "MekhriCircle", "Goraguntepalya"]
             }
             nodes = neighbors_map.get(event_junction, ["RichmondCircle", "CorporationCircle"])
             recs = []
@@ -140,15 +150,37 @@ class RoutingEngine:
             tgt_coords = self.get_junction_coords(target)
             # Interpolate a dummy path
             mid_coords = ((src_coords[0]+tgt_coords[0])/2.0 + 0.005, (src_coords[1]+tgt_coords[1])/2.0 + 0.005)
+            
+            # Create a more realistic diversion path by pulling some nearby nodes
+            all_nodes = list(self.junctions.keys())
+            nearby = [n for n in all_nodes if n not in [source, target, blocked_node] 
+                     and geodesic(src_coords, self.junctions[n]).meters < 4000]
+            
+            path_nodes = [source]
+            path_coords_list = [list(src_coords)]
+            
+            if nearby:
+                bypass = nearby[0]
+                path_nodes.append(bypass)
+                path_coords_list.append(list(self.junctions[bypass]))
+            else:
+                path_nodes.append("Bypass_Node")
+                path_coords_list.append(list(mid_coords))
+                
+            path_nodes.append(target)
+            path_coords_list.append(list(tgt_coords))
+            
+            dist_m = int(geodesic(src_coords, mid_coords).meters + geodesic(mid_coords, tgt_coords).meters)
+            
             return [
                 {
                     "route_id": 1,
-                    "path": [source, "Bypass_Node", target],
-                    "path_coordinates": [list(src_coords), list(mid_coords), list(tgt_coords)],
-                    "travel_time_min": 12.5,
-                    "distance_m": 1800,
+                    "path": path_nodes,
+                    "path_coordinates": path_coords_list,
+                    "travel_time_min": round((dist_m / 8.33) / 60.0, 2),
+                    "distance_m": dist_m,
                     "congestion_index": 0.1,
-                    "description": "Via Residential Bypass"
+                    "description": f"Via {path_nodes[1].replace('_', ' ')}"
                 }
             ]
 
