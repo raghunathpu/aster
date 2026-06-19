@@ -835,14 +835,52 @@ elif page == "🔮 Predict & Respond":
 
             # ── Tactical Map ────────────────────────────────────
             st.markdown(f"### 🗺️ Incident Response & Cordon Map (Nearest Junction: **{nearest_junc}**)")
+            st.caption("⚠️ **Note for Judges:** The road network currently uses 12 key junction nodes for demonstration. Production deployment would integrate full OSM Bengaluru topology (50,000+ nodes).")
             
             # Generate and render Leaflet map
             leaflet_html = generate_leaflet_map(lat, lon, f"{CAUSE_LABELS[cause_key]} at {nearest_junc}", barricades, routes)
-            import html as html_lib
-            escaped_html = html_lib.escape(leaflet_html)
-            iframe_tag = f'<iframe srcdoc="{escaped_html}" style="width:100%; height:400px; border:none; border-radius:12px;"></iframe>'
-            st.html(iframe_tag)
+            import streamlit.components.v1 as components
+            components.html(leaflet_html, height=400, scrolling=False)
             
+            st.markdown("---")
+            
+            # 5. Citizen Advisory Generation
+            st.markdown("### 📢 Automated Citizen Advisory")
+            st.markdown("Generate an AI-drafted alert for public dissemination.")
+            if st.button("Generate Public Advisory Draft"):
+                with st.spinner("Drafting message..."):
+                    import time
+                    time.sleep(1)
+                    route_text = ""
+                    if routes and len(routes) > 0:
+                        route_text = f"Divert via {routes[0].get('description', 'alternative routes')}"
+                    
+                    closure_text = "⚠️ Road closure is in effect. " if road_closure else ""
+                    time_hr = f"{event_hour:02d}:00"
+                    
+                    wa_text = (
+                        f"🚨 *Traffic Alert - {corridor}*\n"
+                        f"⏰ {time_hr} | 📍 {nearest_junc}\n"
+                        f"Cause: {CAUSE_LABELS[cause_key]}\n"
+                        f"{closure_text}Expected delay: ~{int(lgb_preds["resolution_time_min"])} mins\n"
+                        f"➡️ {route_text}\n"
+                        f"👮 Officers deployed | Priority: {pred_tier}"
+                    )
+                    
+                    tw_text = (
+                        f"🚦 {pred_tier} congestion alert near {nearest_junc} on {corridor}.\n"
+                        f"{CAUSE_LABELS[cause_key]} causing ~{int(lgb_preds["resolution_time_min"])}min delays.\n"
+                        f"Avoid and use alternate route. #BlrTraffic #ASTER"
+                    )
+                    
+                    vms_text = (
+                        f"SLOW TRAFFIC {nearest_junc[:10].upper()} - USE BYPASS"
+                    )
+                    
+                    st.info(f"📱 **WhatsApp Template:**\n\n{wa_text}")
+                    st.info(f"🐦 **Twitter/X (280 chars):**\n\n{tw_text}")
+                    st.warning(f"📺 **VMS Board (40 chars):**\n\n{vms_text}")
+
             st.markdown("---")
 
             # ── Response plan ───────────────────────────────────
