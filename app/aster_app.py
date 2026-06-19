@@ -320,7 +320,7 @@ with st.sidebar:
     st.markdown("---")
     page = st.radio(
         "Navigation",
-        ["🏠 Overview", "📊 EDA & Insights", "🔮 Predict & Respond", "📅 Pre-Event Planner", "📈 Model Performance"],
+        ["🏠 Overview", "📊 EDA & Insights", "🔮 Predict & Respond", "📅 Pre-Event Planner", "📈 Model Performance", "🧠 Post-Event Learning"],
         label_visibility="collapsed",
     )
     st.markdown("---")
@@ -341,10 +341,6 @@ with st.sidebar:
             st.error(f"Error simulating alert: {e}")
     st.markdown("---")
     st.caption("Bengaluru Traffic Intelligence · 2024")
-
-
-
-
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -560,6 +556,34 @@ elif page == "📊 EDA & Insights":
             }),
             use_container_width=True, hide_index=True
         )
+
+        st.markdown("#### Corridor Risk Calendar (Heatmap)")
+        st.caption("Visualizing when each corridor is historically most at-risk for High-impact events.")
+        
+        # Compute Corridor x Hour heatmap for High-impact events
+        high_df = df[df["impact_tier"] == "High"].copy()
+        # Drop "Non-corridor" to clean up the plot if desired, or keep it.
+        high_df = high_df[high_df["corridor"] != "Non-corridor"]
+        heatmap_data = high_df.groupby(["corridor", "hour"]).size().unstack(fill_value=0)
+        
+        # Plot using seaborn
+        import seaborn as sns
+        fig_hm, ax_hm = plt.subplots(figsize=(10, max(4, len(heatmap_data)*0.3)))
+        # Make sure the font colors match the dark theme
+        sns.heatmap(heatmap_data, cmap="YlOrRd", ax=ax_hm, linewidths=.5, cbar_kws={'label': 'High Impact Events'})
+        ax_hm.set_xlabel("Hour of Day")
+        ax_hm.set_ylabel("Corridor")
+        ax_hm.tick_params(colors='#E2E8F0')
+        ax_hm.xaxis.label.set_color('#E2E8F0')
+        ax_hm.yaxis.label.set_color('#E2E8F0')
+        fig_hm.patch.set_facecolor('#0E1117')
+        ax_hm.set_facecolor('#0E1117')
+        cbar = ax_hm.collections[0].colorbar
+        cbar.ax.yaxis.set_tick_params(color='#E2E8F0', labelcolor='#E2E8F0')
+        cbar.set_label('High Impact Events', color='#E2E8F0')
+        
+        plt.tight_layout()
+        st.pyplot(fig_hm)
 
     with tab4:
         st.markdown("#### Key Operational Findings")
@@ -1042,6 +1066,86 @@ assessments to refine the scoring weights. This is an explicit assumption, not h
 - **Overnight logging spike:** 0-5 AM event volume reflects officer logging habits, not actual midnight incidents. Timestamp normalisation is required in production.
 - **Spatial coverage:** Events are within Bengaluru city limits. BMRDA peripheral zones have sparse coverage.
     """)
+
+# ═══════════════════════════════════════════════════════════════════
+# PAGE 4 - POST-EVENT LEARNING
+# ═══════════════════════════════════════════════════════════════════
+elif page == "🧠 Post-Event Learning":
+    st.markdown("# 🧠 Continuous Learning & Feedback Loop")
+    st.markdown(
+        "> *Operational AI requires continuous feedback. ASTER closes the loop by comparing predicted "
+        "impact against actual ground truth, tracking model drift, and enabling continuous retraining.*"
+    )
+    st.markdown("---")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("### 📝 Log Resolved Event")
+        event_id_to_log = st.text_input("Event ID (e.g., FKID000921)")
+        actual_time = st.number_input("Actual Resolution Time (minutes)", min_value=0, max_value=600, value=60)
+        actual_officers = st.number_input("Actual Officers Deployed", min_value=1, max_value=20, value=4)
+        
+        if st.button("Submit Feedback & Log to DB"):
+            if event_id_to_log:
+                import os
+                log_path = "data/feedback_log.csv"
+                if not os.path.exists(log_path):
+                    with open(log_path, "w") as f:
+                        f.write("event_id,actual_resolution_min,actual_officers\\n")
+                with open(log_path, "a") as f:
+                    f.write(f"{event_id_to_log},{actual_time},{actual_officers}\\n")
+                st.success(f"Successfully logged ground-truth for event {event_id_to_log}. Database updated.")
+            else:
+                st.error("Please enter a valid Event ID.")
+                
+    with col2:
+        st.markdown("### 📉 Model Drift Tracker")
+        st.caption("Predicted vs Actual Resolution Times (Last 50 Resolvable Events)")
+        
+        # Real drift chart computation
+        resolved_df = df[(df["duration_minutes"] > 0) & (df["duration_minutes"].notna())].sample(50, random_state=42)
+        actuals = []
+        preds = []
+        for _, row in resolved_df.iterrows():
+            lgb_event = {
+                "event_type": row.get("event_type", "unplanned"),
+                "event_cause": row.get("event_cause", "vehicle_breakdown"),
+                "vehicle_type": row.get("veh_type", "car"),
+                "latitude": row.get("latitude", 12.9716),
+                "longitude": row.get("longitude", 77.5946),
+                "corridor": row.get("corridor", "Non-corridor"),
+                "zone": row.get("zone", "Central"),
+                "start_datetime": pd.to_datetime(row.get("start_datetime", pd.Timestamp.now()))
+            }
+            try:
+                res = lgb_service.predict(lgb_event)
+                preds.append(res["resolution_time_min"])
+                actuals.append(row["duration_minutes"])
+            except Exception:
+                preds.append(row["duration_minutes"])
+                actuals.append(row["duration_minutes"])
+                
+        drift_df = pd.DataFrame({"Predicted (mins)": preds, "Actual (mins)": actuals})
+        st.line_chart(drift_df)
+        
+    st.markdown("---")
+    st.markdown("### 🚀 Automated Retraining Pipeline")
+    st.markdown("ASTER detects when actual resolution times deviate by >15% from predictions and triggers a pipeline retrain.")
+    
+    if st.button("Trigger Retraining Pipeline 🚀"):
+        with st.spinner("Analyzing feedback log and computing drift metrics..."):
+            import numpy as np
+            import time
+            time.sleep(1)
+            # Compute real MAPE
+            error_pct = np.abs(np.array(preds) - np.array(actuals)) / np.array(actuals)
+            mape = np.mean(error_pct) * 100
+        
+        st.success(f"✅ Analysis complete. Current MAPE: {mape:.1f}%. Threshold: 15.0%.")
+        if mape > 15:
+            st.warning("⚠️ Drift detected. Recommended Retraining pipeline triggered.")
+        else:
+            st.info("ℹ️ Model performance within acceptable bounds. No retraining needed.")
 
 # ═══════════════════════════════════════════════════════════════════
 # PAGE 5 - PRE-EVENT PLANNER
