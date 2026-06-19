@@ -697,9 +697,10 @@ elif page == "🔮 Predict & Respond":
     # ── Right panel - results ─────────────────────────────────────
     with col_result:
         if predict_btn:
-            now_utc = pd.Timestamp.now(tz="UTC").replace(
-                hour=max(0, event_hour - 5), minute=30
-            )
+            # Properly convert local time to UTC
+            now_utc = pd.Timestamp.now(tz="Asia/Kolkata").replace(
+                hour=event_hour, minute=30
+            ).tz_convert("UTC")
 
             event_dict = {
                 "event_type": event_type,
@@ -910,9 +911,10 @@ elif page == "🔮 Predict & Respond":
             # ── Response plan ───────────────────────────────────
             st.markdown("### 🗂️ Operational Response Plan")
 
-            r1, r2, r3, r4 = st.columns(4)
+            r1, r2 = st.columns(2)
             r1.metric("Response Priority", plan_d["response_priority"])
             r2.metric("Optimized Officers", f"{current_allocation} Deployed", help="Dynamically solved using Google OR-Tools MILP")
+            r3, r4 = st.columns(2)
             r3.metric("Deploy Within",     plan_d["deployment_time"])
             r4.metric("Diversion",         "Yes" if "Mandatory" in plan_d["diversion_urgency"] else
                                             "Advisory" if "Advisory" in plan_d["diversion_urgency"] else "No")
@@ -1091,9 +1093,9 @@ elif page == "🧠 Post-Event Learning":
                 log_path = "data/feedback_log.csv"
                 if not os.path.exists(log_path):
                     with open(log_path, "w") as f:
-                        f.write("event_id,actual_resolution_min,actual_officers\\n")
+                        f.write("event_id,actual_resolution_min,actual_officers\n")
                 with open(log_path, "a") as f:
-                    f.write(f"{event_id_to_log},{actual_time},{actual_officers}\\n")
+                    f.write(f"{event_id_to_log},{actual_time},{actual_officers}\n")
                 st.success(f"Successfully logged ground-truth for event {event_id_to_log}. Database updated.")
             else:
                 st.error("Please enter a valid Event ID.")
