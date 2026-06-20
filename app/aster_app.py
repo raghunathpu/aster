@@ -1069,7 +1069,7 @@ elif page == "🔮 Predict & Respond":
             st.markdown("#### ✅ Action Checklist")
             for i, item in enumerate(plan_d["action_items"], 1):
                 st.markdown(
-                    f'<div class="action-item">☐ &nbsp;{item}</div>',
+                    f'<div class="action-item">✔️ {item}</div>',
                     unsafe_allow_html=True
                 )
 
@@ -1084,13 +1084,13 @@ elif page == "🔮 Predict & Respond":
             st.markdown(
                 '<div class="card">'
                 '<p class="section-title">What you\'ll get</p>'
-                '<div class="action-item">🎯 &nbsp;Predicted impact tier (Low / Medium / High)</div>'
-                '<div class="action-item">📊 &nbsp;Probability distribution across all tiers</div>'
-                '<div class="action-item">👮 &nbsp;Officer count recommendation</div>'
-                '<div class="action-item">🚧 &nbsp;Barricading intensity</div>'
-                '<div class="action-item">🔀 &nbsp;Diversion urgency</div>'
-                '<div class="action-item">⏱️ &nbsp;Target deployment time</div>'
-                '<div class="action-item">✅ &nbsp;Actionable step-by-step checklist</div>'
+                '<div class="action-item">🎯 Predicted impact tier (Low / Medium / High)</div>'
+                '<div class="action-item">📊 Probability distribution across all tiers</div>'
+                '<div class="action-item">👮 Officer count recommendation</div>'
+                '<div class="action-item">🚧 Barricading intensity</div>'
+                '<div class="action-item">🔀 Diversion urgency</div>'
+                '<div class="action-item">⏱️ Target deployment time</div>'
+                '<div class="action-item">✅ Actionable step-by-step checklist</div>'
                 '</div>',
                 unsafe_allow_html=True
             )
