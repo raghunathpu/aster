@@ -44,20 +44,32 @@ st.set_page_config(
 # ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
+  /* Use theme-aware variables where possible, or fallback to sensible defaults */
   html, body, [class*="css"] { font-family: 'Inter', 'Segoe UI', sans-serif; }
-  .main { background: #0F1729; }
-  .block-container { padding: 1.5rem 2rem; max-width: 1400px; }
-  .stMetric { background: #1E2D4E; border-radius: 10px; padding: 12px 16px; border: 1px solid #2D4070; }
-  .stMetric label { color: #93C5FD !important; font-size: 0.75rem !important; }
-  .stMetric .metric-value { color: #E2E8F0 !important; }
-  div[data-testid="stSidebar"] { background: #0A1020 !important; }
-
+  
+  /* Make page responsive */
+  .block-container { padding: 1.5rem 2rem; max-width: 100%; width: 1400px; }
+  
+  /* Metrics styling */
+  .stMetric { 
+    background-color: var(--secondary-background-color); 
+    color: var(--text-color);
+    border-radius: 10px; 
+    padding: 12px 16px; 
+    border: 1px solid rgba(128, 128, 128, 0.2);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+  }
+  .stMetric label { font-size: 0.75rem !important; }
+  
+  /* Cards */
   .card {
-    background: #1E2D4E;
-    border: 1px solid #2D4070;
+    background-color: var(--secondary-background-color);
+    color: var(--text-color);
+    border: 1px solid rgba(128, 128, 128, 0.2);
     border-radius: 12px;
     padding: 16px 20px;
     margin-bottom: 12px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
   }
   .tier-high  { border-left: 4px solid #EF4444; }
   .tier-med   { border-left: 4px solid #F59E0B; }
@@ -67,18 +79,27 @@ st.markdown("""
   .badge-med  { background:#78350F; color:#FCD34D; padding:3px 10px; border-radius:999px; font-size:0.78rem; font-weight:700; }
   .badge-low  { background:#14532D; color:#86EFAC; padding:3px 10px; border-radius:999px; font-size:0.78rem; font-weight:700; }
 
-  .action-item { background:#0D1B2E; border-radius:8px; padding:8px 12px; margin:4px 0; color:#CBD5E1; font-size:0.88rem; }
-  .section-title { color:#93C5FD; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:8px; }
-  h1 { color: #E2E8F0 !important; }
-  h2, h3 { color: #93C5FD !important; }
-  .stSelectbox label, .stSlider label, .stRadio label, .stCheckbox label { color: #CBD5E1 !important; }
+  .action-item { 
+    background-color: var(--secondary-background-color); 
+    color: var(--text-color);
+    border: 1px solid rgba(128, 128, 128, 0.2);
+    border-radius: 8px; 
+    padding: 8px 12px; 
+    margin: 4px 0; 
+    font-size: 0.88rem; 
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  }
+  .section-title { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:8px; color: var(--text-color); opacity: 0.8;}
+  
+  /* Button styling */
   .stButton>button {
     background: linear-gradient(135deg, #2563EB, #1D4ED8);
     color: white; border: none; border-radius: 8px;
     padding: 0.5rem 2rem; font-weight: 600; font-size: 0.95rem;
     transition: all 0.2s;
+    width: 100%; /* Responsive button */
   }
-  .stButton>button:hover { background: linear-gradient(135deg, #3B82F6, #2563EB); transform: translateY(-1px); }
+  .stButton>button:hover { background: linear-gradient(135deg, #3B82F6, #2563EB); transform: translateY(-1px); color: white; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -879,9 +900,9 @@ elif page == "🔮 Predict & Respond":
                     f'<p class="section-title">Resolution Time Forecast (LightGBM)</p>'
                     f'<div style="font-size:1.5rem; font-weight:800; color:{lgb_tier_color}">'
                     f'~ {int(lgb_preds["resolution_time_min"])} Mins Expected Delay</div>'
-                    f'<div style="color:#94A3B8; font-size:0.85rem; margin-top:4px">'
-                    f'Event Impact Score: <strong style="color:#E2E8F0">{lgb_score:.4f}</strong><br>'
-                    f'80% Confidence Interval: <strong style="color:#E2E8F0">{max(5, int(lgb_preds["resolution_time_min"] * 0.75))} - {int(lgb_preds["resolution_time_min"] * 1.4)} mins</strong>'
+                    f'<div style="font-size:0.85rem; margin-top:4px">'
+                    f'Event Impact Score: <strong>{lgb_score:.4f}</strong><br>'
+                    f'80% Confidence Interval: <strong>{max(5, int(lgb_preds["resolution_time_min"] * 0.75))} - {int(lgb_preds["resolution_time_min"] * 1.4)} mins</strong>'
                     f'</div></div>',
                     unsafe_allow_html=True
                 )
@@ -892,9 +913,9 @@ elif page == "🔮 Predict & Respond":
                     f'<p class="section-title">Operational Impact Triage (GBM)</p>'
                     f'<div style="font-size:1.5rem; font-weight:800; color:{TIER_COLORS[eff_tier]}">'
                     f'{tier_icon} {eff_tier.upper()} IMPACT</div>'
-                    f'<div style="color:#94A3B8; font-size:0.85rem; margin-top:4px">'
-                    f'Model Confidence: <strong style="color:#E2E8F0">{confidence*100:.1f}%</strong><br>'
-                    f'Base Impact score: <strong style="color:#E2E8F0">{raw_score}/6</strong>'
+                    f'<div style="font-size:0.85rem; margin-top:4px">'
+                    f'Model Confidence: <strong>{confidence*100:.1f}%</strong><br>'
+                    f'Base Impact score: <strong>{raw_score}/6</strong>'
                     f'</div></div>',
                     unsafe_allow_html=True
                 )
@@ -907,10 +928,10 @@ elif page == "🔮 Predict & Respond":
                 col_bar = TIER_COLORS[tier_lbl]
                 st.markdown(
                     f'<div style="display:flex; align-items:center; margin:3px 0">'
-                    f'<div style="width:70px; color:#94A3B8; font-size:0.8rem">{tier_lbl}</div>'
-                    f'<div style="flex:1; background:#0D1B2E; border-radius:4px; height:16px">'
+                    f'<div style="width:70px; font-size:0.8rem">{tier_lbl}</div>'
+                    f'<div style="flex:1; background-color:var(--secondary-background-color); border-radius:4px; height:16px">'
                     f'<div style="width:{bar_w}%; background:{col_bar}; border-radius:4px; height:16px; opacity:0.85"></div></div>'
-                    f'<div style="width:55px; text-align:right; color:#E2E8F0; font-size:0.85rem; font-weight:600">{p_val*100:.1f}%</div>'
+                    f'<div style="width:55px; text-align:right; font-size:0.85rem; font-weight:600">{p_val*100:.1f}%</div>'
                     f'</div>',
                     unsafe_allow_html=True
                 )
@@ -935,7 +956,7 @@ elif page == "🔮 Predict & Respond":
                     val = sv[i]
                     indicator = "🔴" if val > 0 else "🟢"
                     st.markdown(
-                        f'<div style="background:#0D1B2E; border-radius:8px; padding:8px 12px; margin:4px 0; border-left:3px solid {"#EF4444" if val > 0 else "#22C55E"}">'
+                        f'<div style="background-color:var(--secondary-background-color); border-radius:8px; padding:8px 12px; margin:4px 0; border-left:3px solid {"#EF4444" if val > 0 else "#22C55E"}">'
                         f'{indicator} <strong>{feat_name}</strong>: <span style="float:right; font-family:monospace">{val:+.3f}</span></div>',
                         unsafe_allow_html=True
                     )
@@ -1008,7 +1029,7 @@ elif page == "🔮 Predict & Respond":
 
             # Add cascading metrics detail
             st.markdown(
-                f'<div class="card" style="background: #111E36; border: 1px solid #1E2D4E;">'
+                f'<div class="card">'
                 f'<p class="section-title">Cascading AI Prediction Breakdown</p>'
                 f'• 🚧 <strong>Requires Road Closure:</strong> {"Yes" if lgb_preds["requires_road_closure"]==1 else "No"} '
                 f'(Probability: {lgb_preds["requires_road_closure_prob"]*100:.1f}%)<br>'
