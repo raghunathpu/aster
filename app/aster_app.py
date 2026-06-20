@@ -427,7 +427,7 @@ into a specific, actionable response plan - in under 2 seconds.
         st.markdown("### Impact Distribution")
         img_path = os.path.join(ASSETS, "eda_impact_dist.png")
         if os.path.exists(img_path):
-            st.image(img_path, use_container_width=True)
+            st.image(img_path, width='stretch')
 
         st.markdown("### The Three-Tier System")
         for tier, color, desc in [
@@ -477,27 +477,27 @@ elif page == "📊 EDA & Insights":
         with c1:
             st.markdown("#### Event Cause Distribution")
             img = os.path.join(ASSETS, "eda_cause_dist.png")
-            if os.path.exists(img): st.image(img, use_container_width=True)
+            if os.path.exists(img): st.image(img, width='stretch')
             st.caption("Vehicle breakdowns dominate (60%). High-impact causes - accidents, construction, events - form a critical minority requiring elevated response.")
         with c2:
             st.markdown("#### Cause x Impact Tier Heatmap")
             img = os.path.join(ASSETS, "eda_heatmap.png")
-            if os.path.exists(img): st.image(img, use_container_width=True)
+            if os.path.exists(img): st.image(img, width='stretch')
             st.caption("Accidents, construction and public events show the highest High-impact concentration. Vehicle breakdowns generate volume but are mostly Medium due to corridor assignment.")
 
         st.markdown("#### Impact Tier Distribution")
         img = os.path.join(ASSETS, "eda_impact_dist.png")
-        if os.path.exists(img): st.image(img, use_container_width=True)
+        if os.path.exists(img): st.image(img, width='stretch')
 
     with tab2:
         st.markdown("#### Monthly Event Volume Trend")
         img = os.path.join(ASSETS, "eda_monthly_trend.png")
-        if os.path.exists(img): st.image(img, use_container_width=True)
+        if os.path.exists(img): st.image(img, width='stretch')
         st.caption("March 2024 saw the highest event volume (1,929). Planned events peak in construction season (Nov-Mar).")
 
         st.markdown("#### Hourly Distribution (IST)")
         img = os.path.join(ASSETS, "eda_hourly.png")
-        if os.path.exists(img): st.image(img, use_container_width=True)
+        if os.path.exists(img): st.image(img, width='stretch')
         st.caption("High overnight reporting (0-5 AM) reflects patrol-officer logging of overnight incidents at shift start. True operational peaks align with morning (7-10 AM) and evening (5-9 PM) commute windows.")
 
         col_a, col_b = st.columns(2)
@@ -525,19 +525,19 @@ elif page == "📊 EDA & Insights":
         with col_b:
             st.markdown("**Event Resolution Time**")
             img = os.path.join(ASSETS, "eda_duration.png")
-            if os.path.exists(img): st.image(img, use_container_width=True)
+            if os.path.exists(img): st.image(img, width='stretch')
 
     with tab3:
         c1, c2 = st.columns(2)
         with c1:
             st.markdown("#### Top Corridors by Volume")
             img = os.path.join(ASSETS, "eda_corridors.png")
-            if os.path.exists(img): st.image(img, use_container_width=True)
+            if os.path.exists(img): st.image(img, width='stretch')
             st.caption("Mysore Road leads with 743 events. All named corridors are classified High priority - a key signal in ASTER's scoring.")
         with c2:
             st.markdown("#### Zone-Wise Event Density")
             img = os.path.join(ASSETS, "eda_zones.png")
-            if os.path.exists(img): st.image(img, use_container_width=True)
+            if os.path.exists(img): st.image(img, width='stretch')
             st.caption("Central Zone 2 (MG Road, Brigade area) and West Zone 1 (Mysore Road corridor) show the highest combined event density.")
 
         st.markdown("#### Hotspot Police Stations (top 15)")
@@ -555,7 +555,7 @@ elif page == "📊 EDA & Insights":
                 "road_closures": "Road Closures",
                 "high_%": "High Impact %",
             }),
-            use_container_width=True, hide_index=True
+            width='stretch', hide_index=True
         )
 
         st.markdown("#### Corridor Risk Calendar (Heatmap)")
@@ -745,7 +745,7 @@ elif page == "🔮 Predict & Respond":
         apply_monsoon = st.checkbox("Enable Monsoon Risk Multiplier (June - Sept)", value=False)
         st.caption("Increases predicted severity to account for water logging and lower road capacities.")
 
-        predict_btn = st.button("🚀  Analyse Event & Generate Response Plan", use_container_width=True)
+        predict_btn = st.button("🚀  Analyse Event & Generate Response Plan", width='stretch')
 
     # ── Right panel - results ─────────────────────────────────────
     with col_result:
@@ -1050,14 +1050,17 @@ elif page == "🔮 Predict & Respond":
                     "ScatterplotLayer",
                     data=alloc_df,
                     get_position='[lon, lat]',
-                    get_color='color',
-                    get_radius=300,
+                    get_fill_color='color',
+                    get_line_color='[255, 255, 255, 200]',
+                    line_width_min_pixels=1,
+                    get_radius=500,
+                    pickable=True
                 )
-                view_state_cc = pdk.ViewState(latitude=lat, longitude=lon, zoom=11)
-                st.pydeck_chart(pdk.Deck(layers=[layer_cc], initial_view_state=view_state_cc, map_style="mapbox://styles/mapbox/dark-v10"))
+                view_state_cc = pdk.ViewState(latitude=lat, longitude=lon, zoom=10)
+                st.pydeck_chart(pdk.Deck(layers=[layer_cc], initial_view_state=view_state_cc))
                 
             with c_table:
-                st.dataframe(alloc_df.drop(columns=["lat", "lon", "color"]), use_container_width=True, hide_index=True)
+                st.dataframe(alloc_df.drop(columns=["lat", "lon", "color"]), width='stretch', hide_index=True)
                 # Show utilization progress
                 total_allocated = sum(a["allocated_officers"] for a in allocations)
                 st.markdown(f"**Total Officer Pool Utilization:** `{total_allocated} / 30` Officers Active")
@@ -1119,13 +1122,13 @@ elif page == "📈 Model Performance":
         st.markdown("#### Confusion Matrix - Gradient Boosting")
         img = os.path.join(ASSETS, "confusion_matrix.png")
         if os.path.exists(img):
-            st.image(img, use_container_width=True)
+            st.image(img, width='stretch')
             st.caption("Near-perfect separation across all three tiers.")
     with col_b:
         st.markdown("#### Top Feature Importances")
         img = os.path.join(ASSETS, "feature_importance.png")
         if os.path.exists(img):
-            st.image(img, use_container_width=True)
+            st.image(img, width='stretch')
 
     st.markdown("#### Baseline vs Main Model")
     comp_df = pd.DataFrame({
@@ -1139,7 +1142,7 @@ elif page == "📈 Model Performance":
         "AUC-ROC": [f"{rf_m.get('auc_roc',0):.4f}",
                     f"{gb_m.get('auc_roc',0):.4f}"],
     })
-    st.dataframe(comp_df, use_container_width=True, hide_index=True)
+    st.dataframe(comp_df, width='stretch', hide_index=True)
 
     st.markdown("---")
     st.markdown("### 🔍 Target Engineering - Transparency Note")
@@ -1211,7 +1214,7 @@ elif page == "🧠 Post-Event Learning":
         if search_q:
             res = df[df['corridor'].str.contains(search_q, case=False, na=False) | df['address'].str.contains(search_q, case=False, na=False)]
             if len(res) > 0:
-                st.dataframe(res[["id", "event_cause", "corridor", "duration_minutes", "impact_tier"]].head(10), use_container_width=True, hide_index=True)
+                st.dataframe(res[["id", "event_cause", "corridor", "duration_minutes", "impact_tier"]].head(10), width='stretch', hide_index=True)
                 st.caption(f"Found {len(res)} matching incidents.")
             else:
                 st.caption("No matches found.")
@@ -1286,7 +1289,7 @@ elif page == "📅 Pre-Event Planner":
         crowd_size = st.select_slider("Expected Crowd", options=["Small (<5k)", "Medium (5k-15k)", "Large (15k-40k)", "Mega (>40k)"], value="Large (15k-40k)")
         event_type = st.selectbox("Event Category", ["Sports Match", "Political Rally", "Religious Procession", "Festival / Concert"])
         
-        plan_btn = st.button("📊 Generate Forecast & Plan", use_container_width=True)
+        plan_btn = st.button("📊 Generate Forecast & Plan", width='stretch')
 
     with c2:
         if plan_btn:
