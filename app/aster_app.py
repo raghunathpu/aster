@@ -7,6 +7,11 @@ Run:  streamlit run app/aster_app.py
 """
 
 import os, sys, json, joblib, datetime
+import warnings
+
+# Suppress warnings to keep console output clean
+warnings.filterwarnings("ignore")
+
 import pandas as pd
 import numpy as np
 import matplotlib
