@@ -329,8 +329,7 @@ with st.sidebar:
     st.markdown(
         "**Data:** 8,173 events · Nov 2023 - Apr 2024\n\n"
         "**Coverage:** Bengaluru, Karnataka\n\n"
-        "**Model:** Gradient Boosting\n\n"
-        "**Accuracy:** 99.9%  |  AUC: 0.9999"
+        "**Model:** Gradient Boosting"
     )
     st.markdown("---")
     st.markdown("### 📡 Live Feed Simulator")
