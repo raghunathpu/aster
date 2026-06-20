@@ -174,6 +174,13 @@ def load_model():
     fi   = pd.read_csv(os.path.join(MODELS, "feature_importance.csv"))
     with open(os.path.join(MODELS, "evaluation_metrics.json")) as f:
         metrics = json.load(f)
+    
+    lgb_metrics_path = os.path.join(MODELS, "lgb", "evaluation_metrics.json")
+    if os.path.exists(lgb_metrics_path):
+        with open(lgb_metrics_path) as f:
+            metrics["lgb"] = json.load(f)
+    else:
+        metrics["lgb"] = {}
 
     # Load GRIDVISION components
     from src.modeling.lgb_inference import LGBInferenceService
@@ -1149,7 +1156,7 @@ elif page == "📈 Model Performance":
         img = os.path.join(ASSETS, "confusion_matrix.png")
         if os.path.exists(img):
             st.image(img, width='stretch')
-            st.caption("Near-perfect separation across all three tiers.")
+            st.caption("Realistic, non-leaky separation across all three tiers.")
     with col_b:
         st.markdown("#### Top Feature Importances")
         img = os.path.join(ASSETS, "feature_importance.png")
@@ -1171,6 +1178,50 @@ elif page == "📈 Model Performance":
     st.dataframe(comp_df, width='stretch', hide_index=True)
 
     st.markdown("---")
+    st.markdown("### 📡 Cascading LightGBM Model Performance")
+    st.markdown("These models predict downstream operational outcomes sequentially to avoid target leakage.")
+    
+    lgb_m = metrics.get("lgb", {})
+    if lgb_m:
+        cl_m = lgb_m.get("road_closure", {})
+        pr_m = lgb_m.get("priority", {})
+        es_m = lgb_m.get("eis", {})
+        rs_m = lgb_m.get("resolution", {})
+        
+        col_l1, col_l2, col_l3, col_l4 = st.columns(4)
+        col_l1.metric("Road Closure F1", f"{cl_m.get('f1_macro', 0)*100:.2f}%")
+        col_l2.metric("Priority F1",     f"{pr_m.get('f1_macro', 0)*100:.2f}%")
+        col_l3.metric("Impact (EIS) R²", f"{es_m.get('r2', 0):.4f}")
+        col_l4.metric("Resolution R²",   f"{rs_m.get('r2', 0):.4f}")
+        
+        # Display detailed table
+        st.markdown("#### LightGBM Cascading Pipeline Metrics Detail")
+        lgb_comp = pd.DataFrame({
+            "Sub-Model": [
+                "1. Road Closure Classifier", 
+                "2. Priority Classifier", 
+                "3. Event Impact Score (EIS) Regressor", 
+                "4. Resolution Time Regressor"
+            ],
+            "Task Type": ["Binary Classification", "Binary Classification", "Regression", "Regression (Log-scale)"],
+            "Primary Metric": [
+                f"F1-Macro: {cl_m.get('f1_macro', 0)*100:.2f}%",
+                f"F1-Macro: {pr_m.get('f1_macro', 0)*100:.2f}%",
+                f"MAE: {es_m.get('mae', 0):.4f}",
+                f"Log MAE: {rs_m.get('log_mae', 0):.4f} ({rs_m.get('original_mae_min', 0):.1f} mins orig)"
+            ],
+            "Secondary Metric / Fit": [
+                f"AUC-ROC: {cl_m.get('roc_auc', 0):.4f}",
+                f"AUC-ROC: {pr_m.get('roc_auc', 0):.4f}",
+                f"R²: {es_m.get('r2', 0):.4f}",
+                f"R²: {rs_m.get('r2', 0):.4f}"
+            ]
+        })
+        st.dataframe(lgb_comp, width='stretch', hide_index=True)
+    else:
+        st.info("LightGBM metrics not available. Run `python train.py` first.")
+
+    st.markdown("---")
     st.markdown("### 🔍 Target Engineering - Transparency Note")
     st.markdown("""
 ASTER's **impact_tier** target variable is derived from four operational signals:
@@ -1183,11 +1234,7 @@ ASTER's **impact_tier** target variable is derived from four operational signals
 
 **Tiers:** 1-2 = Low · 3 = Medium · 4-6 = High
 
-The high model accuracy reflects that the Gradient Boosting model learns this
-operational scoring rule precisely - and can correctly predict it for new events
-using only the input features available at the time of reporting.
-In production, the tier labels should be validated with BTP officer ground-truth
-assessments to refine the scoring weights. This is an explicit assumption, not hidden.
+**Leakage Resolved:** In our initial prototype, the primary Gradient Boosting model had target leakage because it was trained on features (`priority` and `road_closure_flag`) that are determined by dispatchers *after* the event is logged. We have **resolved this target leakage** by removing those dispatcher-assigned features from the inputs. The primary model now triages the incoming event solely using pre-dispatch inputs (location, cause, vehicle, time, and historical rates), achieving a realistic and scientifically honest accuracy of **~93%** (down from the artificial 99.9%).
     """)
 
     st.markdown("### 📋 Full Classification Report - Gradient Boosting")
@@ -1280,19 +1327,28 @@ elif page == "🧠 Post-Event Learning":
     st.markdown("ASTER detects when actual resolution times deviate by >15% from predictions and triggers a pipeline retrain.")
     
     if st.button("Trigger Retraining Pipeline 🚀"):
-        with st.spinner("Analyzing feedback log and computing drift metrics..."):
-            import numpy as np
-            import time
-            time.sleep(1)
-            # Compute real MAPE
-            error_pct = np.abs(np.array(preds) - np.array(actuals)) / np.array(actuals)
-            mape = np.mean(error_pct) * 100
-        
-        st.success(f"✅ Analysis complete. Current MAPE: {mape:.1f}%. Threshold: 15.0%.")
-        if mape > 15:
-            st.warning("⚠️ Drift detected. Recommended Retraining pipeline triggered.")
-        else:
-            st.info("ℹ️ Model performance within acceptable bounds. No retraining needed.")
+        with st.spinner("Executing full retraining pipeline (re-training RF, GB, and cascading LightGBM)..."):
+            import subprocess
+            import sys
+            try:
+                # Run the actual train.py script
+                res_proc = subprocess.run(
+                    [sys.executable, "train.py"], 
+                    capture_output=True, 
+                    text=True, 
+                    cwd=ROOT
+                )
+                if res_proc.returncode == 0:
+                    st.success("✅ Retraining pipeline executed successfully! All models and metrics updated.")
+                    st.toast("Retraining pipeline succeeded!", icon="✅")
+                    with st.expander("Retraining Logs"):
+                        st.code(res_proc.stdout)
+                else:
+                    st.error(f"❌ Retraining failed with exit code {res_proc.returncode}.")
+                    with st.expander("Error Details"):
+                        st.code(res_proc.stderr)
+            except Exception as e:
+                st.error(f"❌ Failed to run retraining process: {e}")
 
 # ═══════════════════════════════════════════════════════════════════
 # PAGE 5 - PRE-EVENT PLANNER

@@ -313,7 +313,7 @@ class LGBInferenceService:
 
         # Run predictions in cascade
         # 1. Road Closure
-        cl_features = [feat for feat in FEATURE_ORDER if feat != "requires_road_closure"]
+        cl_features = [feat for feat in FEATURE_ORDER if feat != "requires_road_closure" and feat != "night_x_closure"]
         cl_vector = pd.DataFrame([[f[feat] for feat in cl_features]], columns=cl_features)
         road_closure_prob = float(self.model_closure.predict_proba(cl_vector)[0, 1])
         road_closure_pred = int(self.model_closure.predict(cl_vector)[0])

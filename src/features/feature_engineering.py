@@ -100,14 +100,14 @@ def compute_historical_frequencies(df: pd.DataFrame) -> pd.DataFrame:
 # Main feature builder
 # ──────────────────────────────────────────────
 CATEGORICAL_FEATURES = [
-    "event_type", "event_cause", "priority",
+    "event_type", "event_cause",
     "corridor", "zone", "veh_type",
     "time_period", "season", "day_type",
 ]
 
 NUMERIC_FEATURES = [
     "hour", "day_of_week", "month", "is_weekend",
-    "is_named_corridor", "road_closure_flag",
+    "is_named_corridor",
     "ps_event_freq", "junction_event_freq",
     "corridor_event_freq", "cause_risk_rate",
     "corridor_closure_rate", "lat_norm", "lon_norm",

@@ -1,4 +1,4 @@
-﻿"""
+"""
 ASTER - Training Entry Point
 =============================
 Run this once to train the model and generate all artefacts.
@@ -46,6 +46,12 @@ if __name__ == "__main__":
     print("=" * 60)
 
     train_pipeline(args.data, args.model_dir, args.assets_dir)
+
+    from src.modeling.train_lgb import train_lgb_pipeline
+    print("\n" + "=" * 60)
+    print("  Training LightGBM Cascading Models")
+    print("=" * 60)
+    train_lgb_pipeline(args.data, args.model_dir)
 
     print("\n" + "=" * 60)
     print("  Next step: streamlit run app/aster_app.py")
