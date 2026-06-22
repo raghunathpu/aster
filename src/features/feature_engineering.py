@@ -57,43 +57,51 @@ def _grid_cell(lat, lon, resolution=0.005):
 # ──────────────────────────────────────────────
 # Historical frequency features
 # ──────────────────────────────────────────────
-def compute_historical_frequencies(df: pd.DataFrame) -> pd.DataFrame:
+def compute_historical_frequencies(df: pd.DataFrame, freq_maps: dict = None) -> tuple:
     """
     Add location-level and cause-level historical frequency columns.
     These capture how 'hotspot' a given junction/police station/cause is.
+    If freq_maps is provided, uses those maps (inference mode). Otherwise, computes them (training mode).
     """
+    if freq_maps is None:
+        freq_maps = {}
+        freq_maps["ps_freq"] = df["police_station"].value_counts().to_dict()
+        if "junction" in df.columns:
+            freq_maps["jn_freq"] = df["junction"].fillna("unknown").value_counts().to_dict()
+        else:
+            freq_maps["jn_freq"] = {}
+        freq_maps["corr_freq"] = df["corridor"].value_counts().to_dict()
+        
+        freq_maps["cause_risk"] = (
+            df.groupby("event_cause")["priority"]
+            .apply(lambda x: (x == "High").mean())
+            .to_dict()
+        )
+        freq_maps["corr_closure"] = (
+            df.groupby("corridor")["road_closure_flag"]
+            .mean()
+            .to_dict()
+        )
+
     # Police station event count
-    ps_freq = df["police_station"].value_counts().to_dict()
-    df["ps_event_freq"] = df["police_station"].map(ps_freq).fillna(1)
+    df["ps_event_freq"] = df["police_station"].map(freq_maps["ps_freq"]).fillna(1)
 
     # Junction event count
     if "junction" in df.columns:
-        jn_freq = df["junction"].fillna("unknown").value_counts().to_dict()
-        df["junction_event_freq"] = df["junction"].fillna("unknown").map(jn_freq).fillna(1)
+        df["junction_event_freq"] = df["junction"].fillna("unknown").map(freq_maps.get("jn_freq", {})).fillna(1)
     else:
         df["junction_event_freq"] = 1
 
     # Corridor event count
-    corr_freq = df["corridor"].value_counts().to_dict()
-    df["corridor_event_freq"] = df["corridor"].map(corr_freq).fillna(1)
+    df["corridor_event_freq"] = df["corridor"].map(freq_maps["corr_freq"]).fillna(1)
 
     # Event cause risk rate (fraction that are High priority)
-    cause_risk = (
-        df.groupby("event_cause")["priority"]
-        .apply(lambda x: (x == "High").mean())
-        .to_dict()
-    )
-    df["cause_risk_rate"] = df["event_cause"].map(cause_risk).fillna(0.5)
+    df["cause_risk_rate"] = df["event_cause"].map(freq_maps["cause_risk"]).fillna(0.5)
 
     # Corridor road-closure rate
-    corr_closure = (
-        df.groupby("corridor")["road_closure_flag"]
-        .mean()
-        .to_dict()
-    )
-    df["corridor_closure_rate"] = df["corridor"].map(corr_closure).fillna(0.0)
+    df["corridor_closure_rate"] = df["corridor"].map(freq_maps["corr_closure"]).fillna(0.0)
 
-    return df
+    return df, freq_maps
 
 
 # ──────────────────────────────────────────────
@@ -107,17 +115,16 @@ CATEGORICAL_FEATURES = [
 
 NUMERIC_FEATURES = [
     "hour", "day_of_week", "month", "is_weekend",
-    "is_named_corridor",
     "ps_event_freq", "junction_event_freq",
     "corridor_event_freq", "cause_risk_rate",
     "corridor_closure_rate", "lat_norm", "lon_norm",
 ]
 
 
-def build_features(df: pd.DataFrame) -> pd.DataFrame:
+def build_features(df: pd.DataFrame, freq_maps: dict = None) -> tuple:
     """
     Add all engineered features to the DataFrame.
-    Returns the modified DataFrame (does not copy).
+    Returns the modified DataFrame and the fitted frequency maps.
     """
     # ── Time features ──────────────────────────
     if "start_local" in df.columns:
@@ -147,9 +154,9 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     df["zone"] = df["zone"].fillna("Unknown")
 
     # ── Historical frequency features ─────────
-    df = compute_historical_frequencies(df)
+    df, freq_maps = compute_historical_frequencies(df, freq_maps)
 
-    return df
+    return df, freq_maps
 
 
 def encode_for_model(df: pd.DataFrame, fit_encoders: dict = None):

@@ -75,27 +75,40 @@ def compute_duration(df: pd.DataFrame) -> pd.DataFrame:
 
 def build_impact_score(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Composite impact score 1-6:
-        +2  requires_road_closure == True
-        +1  priority == High
-        +1  event_cause in high-impact set
-        +1  named corridor
-    Tier: 1-2=Low, 3=Medium, 4-6=High
+    Composite impact score and tier using Ground Truth Time-to-Resolution.
+    If duration is available:
+        < 30 min = Low
+        30 - 60 min = Medium
+        > 60 min = High
+    Fallback heuristic applied only if duration is missing.
     """
-    score = pd.Series(1, index=df.index)
-    closure = df["requires_road_closure"].astype(str).str.lower().isin(["true", "1", "yes"])
-    score += closure.astype(int) * 2
-    score += (df["priority"] == "High").astype(int)
-    score += df["event_cause"].isin(HIGH_IMPACT_CAUSES).astype(int)
-    score += df["is_named_corridor"]
-    df["impact_score"] = score.clip(1, 6).astype(int)
-
-    def _tier(s):
-        if s <= 2: return "Low"
-        elif s == 3: return "Medium"
+    def _compute_tier(row):
+        duration = row.get("duration_minutes")
+        if pd.notna(duration):
+            if duration < 30: return "Low"
+            elif duration <= 60: return "Medium"
+            else: return "High"
+        
+        # Fallback to operational heuristics
+        score = 1
+        closure = str(row.get("requires_road_closure", False)).lower() in ["true", "1", "yes"]
+        if closure: score += 2
+        if row.get("priority") == "High": score += 1
+        if row.get("event_cause") in HIGH_IMPACT_CAUSES: score += 1
+        if row.get("is_named_corridor", 0) == 1: score += 1
+        
+        if score <= 2: return "Low"
+        elif score == 3: return "Medium"
         return "High"
 
-    df["impact_tier"] = df["impact_score"].map(_tier)
+    df["impact_tier"] = df.apply(_compute_tier, axis=1)
+    
+    # Map tier back to a 1-6 score for backwards compatibility with UI
+    def _tier_score(t):
+        if t == "Low": return 2
+        elif t == "Medium": return 3
+        return 5
+    df["impact_score"] = df["impact_tier"].map(_tier_score)
     return df
 
 
