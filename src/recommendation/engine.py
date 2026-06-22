@@ -1,4 +1,4 @@
-﻿"""
+"""
 ASTER - Operational Recommendation Engine
 ==========================================
 Converts a predicted impact tier + event context into a structured,
@@ -136,6 +136,7 @@ def _compute_escalation(
     junction: Optional[str],
     hour: int,
     requires_road_closure: bool,
+    **kwargs
 ) -> tuple:
     """
     Apply context-aware escalation logic.
@@ -143,6 +144,11 @@ def _compute_escalation(
     """
     tier_int = _tier_to_int(base_tier)
     triggers = []
+
+    # Weather Rule: Heavy rain or high multiplier upgrades tier
+    if kwargs.get("wx_multiplier", 1.0) >= 1.2:
+        tier_int = min(2, tier_int + 1)
+        triggers.append(f"Weather Risk: Applied {kwargs.get('wx_multiplier')}x multiplier due to active rain/conditions.")
 
     # Rule 1: High-stress cause on named corridor -> upgrade
     if event_cause in ESCALATION_CAUSES and corridor in NAMED_CORRIDORS:
@@ -260,6 +266,8 @@ def generate_response_plan(
     hour: int,
     requires_road_closure: bool,
     top_factors: Optional[list] = None,
+    station_capacity: int = 5,
+    wx_multiplier: float = 1.0,
 ) -> ResponsePlan:
     """
     Core function: produce a full ResponsePlan from model output + context.
@@ -268,12 +276,17 @@ def generate_response_plan(
     is_peak = _is_peak_hour(hour)
 
     effective_tier, triggers = _compute_escalation(
-        predicted_tier, event_cause, corridor, junction, hour, requires_road_closure
+        predicted_tier, event_cause, corridor, junction, hour, requires_road_closure, wx_multiplier=wx_multiplier
     )
 
     mp_min, mp_max = _manpower(effective_tier, event_cause, requires_road_closure)
     action_items = _action_items(effective_tier, event_cause, corridor, requires_road_closure, is_peak)
     reasoning = _risk_reasoning(effective_tier, event_cause, corridor, confidence, hour)
+    
+    # Resource Optimization Constraint
+    if mp_max > station_capacity:
+        triggers.append(f"Capacity Overflow: {mp_max} officers required but station limit is {station_capacity}.")
+        action_items.insert(0, f"🚨 WARNING: Required manpower ({mp_max}) exceeds station capacity ({station_capacity}). Request backup from adjacent station.")
 
     return ResponsePlan(
         predicted_tier=predicted_tier,
