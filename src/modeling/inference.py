@@ -49,6 +49,7 @@ class ASTERPredictor:
     def _load_artefacts(self):
         self.model    = joblib.load(os.path.join(self.model_dir, "gb_main.pkl"))
         self.encoders = joblib.load(os.path.join(self.model_dir, "encoders.pkl"))
+        self.freq_maps = joblib.load(os.path.join(self.model_dir, "freq_maps.pkl"))
         self.le       = joblib.load(os.path.join(self.model_dir, "label_encoder.pkl"))
         self.feature_names = joblib.load(os.path.join(self.model_dir, "feature_names.pkl"))
         fi_path = os.path.join(self.model_dir, "feature_importance.csv")
@@ -89,7 +90,7 @@ class ASTERPredictor:
         row["zone"]       = row["zone"].fillna("Unknown")
         row["police_station"] = row["police_station"].fillna("Unknown")
 
-        row = build_features(row)
+        row, _ = build_features(row, freq_maps=self.freq_maps)
         return row
 
     def predict_single(self, event: dict) -> dict:

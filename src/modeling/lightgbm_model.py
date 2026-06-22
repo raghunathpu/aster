@@ -4,10 +4,14 @@ ASTER — LightGBM Wrapper
 Wrapper for LightGBM classification and regression models.
 Used for deserializing pre-trained model pickles from Gridvision.
 """
+import warnings
 import lightgbm as lgb
 import numpy as np
 import pickle
 from pathlib import Path
+
+# Suppress sklearn feature-name validation warnings from LightGBM
+warnings.filterwarnings("ignore", message="X does not have valid feature names")
 
 class LightGBMModel:
     def __init__(self, model_type="classification", params=None):
