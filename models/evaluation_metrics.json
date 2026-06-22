@@ -1,52 +1,79 @@
 {
   "random_forest": {
-    "accuracy": 0.9217,
-    "f1_macro": 0.8986,
-    "f1_weighted": 0.9218,
-    "auc_roc": 0.972,
-    "report": "              precision    recall  f1-score   support\n\n         Low       0.91      0.97      0.94       566\n      Medium       0.96      0.92      0.94       848\n        High       0.82      0.82      0.82       221\n\n    accuracy                           0.92      1635\n   macro avg       0.90      0.90      0.90      1635\nweighted avg       0.92      0.92      0.92      1635\n",
+    "accuracy": 0.6728,
+    "f1_macro": 0.6694,
+    "f1_weighted": 0.6729,
+    "auc_roc": 0.8453,
+    "report": "              precision    recall  f1-score   support\n\n         Low       0.70      0.59      0.64       497\n      Medium       0.73      0.73      0.73       606\n        High       0.60      0.68      0.64       532\n\n    accuracy                           0.67      1635\n   macro avg       0.68      0.67      0.67      1635\nweighted avg       0.68      0.67      0.67      1635\n",
     "confusion_matrix": [
       [
-        549,
-        1,
-        16
+        294,
+        77,
+        126
       ],
       [
-        47,
-        776,
-        25
+        44,
+        443,
+        119
       ],
       [
-        7,
-        32,
-        182
+        85,
+        84,
+        363
       ]
     ]
   },
   "gradient_boosting": {
-    "accuracy": 0.9309,
-    "f1_macro": 0.9154,
-    "f1_weighted": 0.9302,
-    "auc_roc": 0.9701,
-    "report": "              precision    recall  f1-score   support\n\n         Low       0.91      0.96      0.94       566\n      Medium       0.94      0.95      0.94       848\n        High       0.95      0.80      0.87       221\n\n    accuracy                           0.93      1635\n   macro avg       0.93      0.90      0.92      1635\nweighted avg       0.93      0.93      0.93      1635\n",
+    "accuracy": 0.6917,
+    "f1_macro": 0.6871,
+    "f1_weighted": 0.6907,
+    "auc_roc": 0.8437,
+    "report": "              precision    recall  f1-score   support\n\n         Low       0.69      0.63      0.66       497\n      Medium       0.73      0.77      0.75       606\n        High       0.65      0.66      0.65       532\n\n    accuracy                           0.69      1635\n   macro avg       0.69      0.69      0.69      1635\nweighted avg       0.69      0.69      0.69      1635\n",
     "confusion_matrix": [
       [
-        543,
-        17,
-        6
+        313,
+        80,
+        104
       ],
       [
-        42,
-        802,
-        4
+        55,
+        469,
+        82
       ],
       [
-        9,
-        35,
-        177
+        88,
+        95,
+        349
       ]
     ],
-    "cv_f1_mean": 0.9211,
-    "cv_f1_std": 0.0013
+    "cv_f1_mean": 0.6551,
+    "cv_f1_std": 0.0289,
+    "honest": true,
+    "leaky_features_removed": []
+  },
+  "scoring_rule_validator": {
+    "accuracy": 0.6917,
+    "f1_macro": 0.6871,
+    "f1_weighted": 0.6907,
+    "auc_roc": 0.8437,
+    "report": "              precision    recall  f1-score   support\n\n         Low       0.69      0.63      0.66       497\n      Medium       0.73      0.77      0.75       606\n        High       0.65      0.66      0.65       532\n\n    accuracy                           0.69      1635\n   macro avg       0.69      0.69      0.69      1635\nweighted avg       0.69      0.69      0.69      1635\n",
+    "confusion_matrix": [
+      [
+        313,
+        80,
+        104
+      ],
+      [
+        55,
+        469,
+        82
+      ],
+      [
+        88,
+        95,
+        349
+      ]
+    ],
+    "note": "This model includes road_closure_flag and priority \u2014 features used in the target variable formula. The near-perfect accuracy validates that the scoring rule is internally consistent, NOT that the model is a generalizable predictor. The HONEST model (gb_main.pkl) is what ASTER uses for live inference."
   }
 }
