@@ -82,6 +82,43 @@ tr:last-child td{border-bottom:none}
 .eda-tabs{display:flex;gap:6px;margin-bottom:20px}
 .et{padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:.84rem;cursor:pointer;transition:all .15s}
 .et.ea{border-color:var(--accent);color:var(--text);background:var(--surface)}
+.suggestions-box{
+  position:absolute;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-top:none;
+  border-radius:0 0 8px 8px;
+  max-height:200px;
+  overflow-y:auto;
+  width:calc(100% - 2px);
+  z-index:1000;
+  box-shadow:0 8px 16px rgba(0,0,0,0.4);
+}
+.suggestion-item{
+  padding:8px 12px;
+  cursor:pointer;
+  font-size:0.78rem;
+  border-bottom:1px solid var(--border);
+  color:var(--text);
+  text-align:left;
+}
+.suggestion-item:last-child{
+  border-bottom:none;
+}
+.suggestion-item:hover{
+  background:var(--surface2);
+  color:var(--accent);
+}
+.resolved-info{
+  background:linear-gradient(135deg, rgba(30,45,78,0.7), rgba(15,23,41,0.5));
+  padding:12px 14px;
+  border-radius:8px;
+  border:1px solid var(--border);
+  margin-top:10px;
+  font-size:0.8rem;
+  text-align:left;
+  line-height:1.6;
+}
 </style>
 </head>
 <body>
@@ -257,38 +294,26 @@ tr:last-child td{border-bottom:none}
         <div class="fg"><label class="fl">Operational Priority</label><div class="rg"><div class="ro"><input type="radio" id="pr-h" name="prio" value="High" checked><label for="pr-h">High</label></div><div class="ro"><input type="radio" id="pr-l" name="prio" value="Low"><label for="pr-l">Low</label></div></div></div>
         <div class="fg"><label class="cbr"><input type="checkbox" id="closure"><span style="font-size:.84rem">Requires Road Closure</span></label></div>
       </div>
-      <div class="card" style="margin-bottom:14px">
-        <div style="font-weight:600;color:#93C5FD;margin-bottom:12px">▸ Location &amp; Corridor</div>
-        <div class="fg"><label class="fl">Corridor</label>
-          <select id="corridor">
-            <option value="Non-corridor">Non-corridor</option>
-            <option value="Mysore Road">Mysore Road</option>
-            <option value="Bellary Road 1">Bellary Road 1</option>
-            <option value="Bellary Road 2">Bellary Road 2</option>
-            <option value="Tumkur Road">Tumkur Road</option>
-            <option value="Hosur Road">Hosur Road</option>
-            <option value="ORR North 1">ORR North 1</option>
-            <option value="ORR North 2">ORR North 2</option>
-            <option value="ORR East 1">ORR East 1</option>
-            <option value="ORR East 2">ORR East 2</option>
-            <option value="Old Madras Road">Old Madras Road</option>
-            <option value="Magadi Road">Magadi Road</option>
-            <option value="Bannerghata Road">Bannerghata Road</option>
-            <option value="CBD 2">CBD 2</option>
-            <option value="West of Chord Road">West of Chord Road</option>
-            <option value="Hennur Main Road">Hennur Main Road</option>
-            <option value="Varthur Road">Varthur Road</option>
-            <option value="Old Airport Road">Old Airport Road</option>
-          </select>
+      <div class="card" style="margin-bottom:14px; position:relative;">
+        <div style="font-weight:600;color:#93C5FD;margin-bottom:12px">▸ Location (Auto-Detect Corridor &amp; Zone)</div>
+        <div class="fg" style="position:relative;">
+          <label class="fl">Search Location</label>
+          <input type="text" id="locSearch" placeholder="e.g. Mysore Road, Hebbal, Jayanagar" autocomplete="off" value="Mysore Road, Bengaluru" style="width:100%;">
+          <div id="suggestionsBox" class="suggestions-box" style="display:none;"></div>
         </div>
-        <div class="fg"><label class="fl">Zone</label>
-          <select id="zone">
-            <option>Central Zone 1</option><option>Central Zone 2</option>
-            <option>North Zone 1</option><option>North Zone 2</option>
-            <option>South Zone 1</option><option selected>South Zone 2</option>
-            <option>East Zone 1</option><option>East Zone 2</option>
-            <option>West Zone 1</option><option>West Zone 2</option>
-          </select>
+        
+        <!-- Hidden inputs to hold values for runPred() -->
+        <input type="hidden" id="corridor" value="Mysore Road">
+        <input type="hidden" id="zone" value="South Zone 2">
+        <input type="hidden" id="latitude" value="12.97">
+        <input type="hidden" id="longitude" value="77.56">
+
+        <!-- Read-only metadata display -->
+        <div class="resolved-info" id="resolvedInfo">
+          <div style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.08em; color:#93C5FD; font-weight:700; margin-bottom:6px;">📍 Auto-Detected Parameters</div>
+          <div style="margin-bottom:2px;">🌍 <b>Coords:</b> <span id="lblCoords">12.97000, 77.56000</span></div>
+          <div style="margin-bottom:2px;">🛣️ <b>Corridor:</b> <span id="lblCorridor">Mysore Road</span></div>
+          <div>🏢 <b>Zone:</b> <span id="lblZone">South Zone 2</span></div>
         </div>
       </div>
       <div class="card" style="margin-bottom:14px">
@@ -513,13 +538,14 @@ function buildLists(){
 
 // Presets
 const PS={
-  bus:{et:'unplanned',cause:'vehicle_breakdown',prio:'High',cl:false,corr:'Mysore Road',zone:'South Zone 2',h:8,veh:'bmtc_bus'},
-  evt:{et:'planned',cause:'public_event',prio:'High',cl:true,corr:'CBD 2',zone:'Central Zone 1',h:18,veh:'unknown'},
-  water:{et:'unplanned',cause:'water_logging',prio:'High',cl:false,corr:'ORR East 2',zone:'East Zone 2',h:9,veh:'unknown'},
-  acc:{et:'unplanned',cause:'accident',prio:'High',cl:true,corr:'Bellary Road 1',zone:'North Zone 1',h:17,veh:'private_car'},
-  prot:{et:'unplanned',cause:'protest',prio:'High',cl:false,corr:'Non-corridor',zone:'Central Zone 2',h:16,veh:'unknown'},
-  vip:{et:'planned',cause:'vip_movement',prio:'High',cl:false,corr:'ORR North 1',zone:'North Zone 2',h:19,veh:'unknown'},
+  bus:{et:'unplanned',cause:'vehicle_breakdown',prio:'High',cl:false,corr:'Mysore Road',zone:'South Zone 2',h:8,veh:'bmtc_bus',lat:12.97,lon:77.56,q:'Mysore Road, Bengaluru'},
+  evt:{et:'planned',cause:'public_event',prio:'High',cl:true,corr:'CBD 2',zone:'Central Zone 1',h:18,veh:'unknown',lat:12.976,lon:77.593,q:'Cubbon Park, Bengaluru'},
+  water:{et:'unplanned',cause:'water_logging',prio:'High',cl:false,corr:'ORR East 2',zone:'East Zone 2',h:9,veh:'unknown',lat:12.935,lon:77.696,q:'ORR East, Bengaluru'},
+  acc:{et:'unplanned',cause:'accident',prio:'High',cl:true,corr:'Bellary Road 1',zone:'North Zone 1',h:17,veh:'private_car',lat:13.017,lon:77.586,q:'Hebbal Flyover, Bengaluru'},
+  prot:{et:'unplanned',cause:'protest',prio:'High',cl:false,corr:'Non-corridor',zone:'Central Zone 2',h:16,veh:'unknown',lat:12.97,lon:77.58,q:'Jayanagar, Bengaluru'},
+  vip:{et:'planned',cause:'vip_movement',prio:'High',cl:false,corr:'ORR North 1',zone:'North Zone 2',h:19,veh:'unknown',lat:13.025,lon:77.637,q:'ORR North, Bengaluru'},
 };
+
 function preset(k){
   const p=PS[k];
   document.querySelector(`input[name=evt][value=${p.et}]`).checked=true;
@@ -528,11 +554,242 @@ function preset(k){
   document.getElementById('closure').checked=p.cl;
   document.getElementById('corridor').value=p.corr;
   document.getElementById('zone').value=p.zone;
+  document.getElementById('latitude').value=p.lat;
+  document.getElementById('longitude').value=p.lon;
+  document.getElementById('locSearch').value=p.q;
+  document.getElementById('lblCorridor').textContent=p.corr;
+  document.getElementById('lblZone').textContent=p.zone;
+  document.getElementById('lblCoords').textContent=p.lat.toFixed(5) + ", " + p.lon.toFixed(5);
   document.getElementById('hour').value=p.h;
   document.getElementById('hd').textContent=p.h+':00';
   document.getElementById('veh').value=p.veh;
   runPred();
 }
+
+// ─────────────────────────────────────────────────────────────────
+// Geocoding and Auto-detection Logic (Nominatim API)
+// ─────────────────────────────────────────────────────────────────
+const ZONE_CENTROIDS = {
+  "Central Zone 1": { latitude: 12.972268, longitude: 77.629443 },
+  "Central Zone 2": { latitude: 12.972872, longitude: 77.581797 },
+  "East Zone 1": { latitude: 12.956891, longitude: 77.713320 },
+  "East Zone 2": { latitude: 13.017862, longitude: 77.680195 },
+  "North Zone 1": { latitude: 13.043826, longitude: 77.607533 },
+  "North Zone 2": { latitude: 13.063711, longitude: 77.575916 },
+  "South Zone 1": { latitude: 12.897866, longitude: 77.581583 },
+  "South Zone 2": { latitude: 12.912628, longitude: 77.619711 },
+  "West Zone 1": { latitude: 12.991717, longitude: 77.519732 },
+  "West Zone 2": { latitude: 12.986432, longitude: 77.559040 }
+};
+
+const CORRIDOR_CENTROIDS = {
+  "Airport New South Road": { latitude: 13.027519, longitude: 77.633527 },
+  "Bannerghata Road": { latitude: 12.896377, longitude: 77.597880 },
+  "Bellary Road 1": { latitude: 13.016800, longitude: 77.586404 },
+  "Bellary Road 2": { latitude: 13.105956, longitude: 77.603271 },
+  "CBD 1": { latitude: 12.981023, longitude: 77.606815 },
+  "CBD 2": { latitude: 12.983312, longitude: 77.595046 },
+  "Hennur Main Road": { latitude: 13.051147, longitude: 77.626191 },
+  "Hosur Road": { latitude: 12.915473, longitude: 77.624664 },
+  "IRR(Thanisandra road)": { latitude: 12.937506, longitude: 77.626945 },
+  "Magadi Road": { latitude: 12.985060, longitude: 77.523344 },
+  "Mysore Road": { latitude: 12.957790, longitude: 77.563652 },
+  "ORR East 1": { latitude: 12.928305, longitude: 77.669131 },
+  "ORR East 2": { latitude: 12.975835, longitude: 77.696026 },
+  "ORR North 1": { latitude: 13.024549, longitude: 77.637439 },
+  "ORR North 2": { latitude: 13.041928, longitude: 77.558822 },
+  "ORR West 1": { latitude: 12.920839, longitude: 77.559128 },
+  "Old Airport Road": { latitude: 12.958868, longitude: 77.661845 },
+  "Old Madras Road": { latitude: 12.980913, longitude: 77.629323 },
+  "Tumkur Road": { latitude: 13.031459, longitude: 77.533663 },
+  "Varthur Road": { latitude: 12.956553, longitude: 77.715936 },
+  "West of Chord Road": { latitude: 12.982972, longitude: 77.546340 }
+};
+
+function matchCorridorByName(addressText) {
+  if (!addressText) return null;
+  const addressLower = addressText.toLowerCase();
+  const keywords = {
+    "mysore road": "Mysore Road",
+    "tumkur road": "Tumkur Road",
+    "hosur road": "Hosur Road",
+    "old madras road": "Old Madras Road",
+    "magadi road": "Magadi Road",
+    "bannerghata road": "Bannerghata Road",
+    "hennur main road": "Hennur Main Road",
+    "hennur road": "Hennur Main Road",
+    "varthur road": "Varthur Road",
+    "old airport road": "Old Airport Road",
+    "west of chord road": "West of Chord Road",
+    "chord road": "West of Chord Road",
+    "thanisandra road": "IRR(Thanisandra road)"
+  };
+  for (const [kw, corr] of Object.entries(keywords)) {
+    if (addressLower.includes(kw)) return corr;
+  }
+  if (addressLower.includes("bellary road")) return "Bellary Road";
+  if (addressLower.includes("orr east")) return "ORR East";
+  if (addressLower.includes("orr north")) return "ORR North";
+  return null;
+}
+
+function detectCorridorAndZoneJS(lat, lon, addressText) {
+  // 1. Zone detection: find closest zone centroid
+  let minZoneDist = Infinity;
+  let detectedZone = "Unknown";
+  for (const [zoneName, coords] of Object.entries(ZONE_CENTROIDS)) {
+    const dist = Math.pow(coords.latitude - lat, 2) + Math.pow(coords.longitude - lon, 2);
+    if (dist < minZoneDist) {
+      minZoneDist = dist;
+      detectedZone = zoneName;
+    }
+  }
+
+  // 2. Corridor detection
+  let nameMatched = matchCorridorByName(addressText);
+  let detectedCorridor = "Non-corridor";
+  
+  if (nameMatched) {
+    if (nameMatched === "Bellary Road" || nameMatched === "ORR East" || nameMatched === "ORR North") {
+      let minSegDist = Infinity;
+      for (const [corrName, coords] of Object.entries(CORRIDOR_CENTROIDS)) {
+        if (corrName.toLowerCase().includes(nameMatched.toLowerCase())) {
+          const dist = Math.pow(coords.latitude - lat, 2) + Math.pow(coords.longitude - lon, 2);
+          if (dist < minSegDist) {
+            minSegDist = dist;
+            detectedCorridor = corrName;
+          }
+        }
+      }
+    } else {
+      detectedCorridor = nameMatched;
+    }
+  } else {
+    // Distance-based detection
+    let minCorrDist = Infinity;
+    let closestCorr = null;
+    for (const [corrName, coords] of Object.entries(CORRIDOR_CENTROIDS)) {
+      const dist = Math.pow(coords.latitude - lat, 2) + Math.pow(coords.longitude - lon, 2);
+      if (dist < minCorrDist) {
+        minCorrDist = dist;
+        closestCorr = corrName;
+      }
+    }
+    // Threshold: 0.008 degrees squared is 0.000064
+    if (minCorrDist < 0.000064) {
+      detectedCorridor = closestCorr;
+    } else {
+      detectedCorridor = "Non-corridor";
+    }
+  }
+
+  return { zone: detectedZone, corridor: detectedCorridor };
+}
+
+function selectLocation(displayName, lat, lon) {
+  document.getElementById('locSearch').value = displayName;
+  document.getElementById('suggestionsBox').style.display = 'none';
+  
+  document.getElementById('latitude').value = lat;
+  document.getElementById('longitude').value = lon;
+  document.getElementById('lblCoords').textContent = lat.toFixed(5) + ", " + lon.toFixed(5);
+  
+  const detection = detectCorridorAndZoneJS(lat, lon, displayName);
+  
+  document.getElementById('corridor').value = detection.corridor;
+  document.getElementById('zone').value = detection.zone;
+  
+  document.getElementById('lblCorridor').textContent = detection.corridor;
+  document.getElementById('lblZone').textContent = detection.zone;
+}
+
+let debounceTimer;
+document.getElementById('locSearch').addEventListener('input', function() {
+  clearTimeout(debounceTimer);
+  const query = this.value.trim();
+  if (query.length < 3) {
+    document.getElementById('suggestionsBox').style.display = 'none';
+    return;
+  }
+  debounceTimer = setTimeout(() => {
+    fetchSuggestions(query);
+  }, 400);
+});
+
+function fetchSuggestions(query) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ", Bengaluru")}&limit=5&viewbox=77.3,13.3,77.9,12.7&bounded=1`;
+  
+  fetch(url, {
+    headers: {
+      'Accept': 'application/json',
+      'User-Agent': 'aster_traffic_triage_app'
+    }
+  })
+  .then(res => res.json())
+  .then(data => {
+    const box = document.getElementById('suggestionsBox');
+    box.innerHTML = '';
+    if (data && data.length > 0) {
+      data.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'suggestion-item';
+        div.textContent = item.display_name;
+        div.addEventListener('click', () => {
+          selectLocation(item.display_name, parseFloat(item.lat), parseFloat(item.lon));
+        });
+        box.appendChild(div);
+      });
+      box.style.display = 'block';
+    } else {
+      fetchFallbackSuggestions(query);
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    fetchFallbackSuggestions(query);
+  });
+}
+
+function fetchFallbackSuggestions(query) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ", Bengaluru")}&limit=5&viewbox=77.3,13.3,77.9,12.7&bounded=0`;
+  fetch(url, {
+    headers: {
+      'Accept': 'application/json',
+      'User-Agent': 'aster_traffic_triage_app'
+    }
+  })
+  .then(res => res.json())
+  .then(data => {
+    const box = document.getElementById('suggestionsBox');
+    box.innerHTML = '';
+    if (data && data.length > 0) {
+      data.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'suggestion-item';
+        div.textContent = item.display_name;
+        div.addEventListener('click', () => {
+          selectLocation(item.display_name, parseFloat(item.lat), parseFloat(item.lon));
+        });
+        box.appendChild(div);
+      });
+      box.style.display = 'block';
+    } else {
+      box.style.display = 'none';
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    document.getElementById('suggestionsBox').style.display = 'none';
+  });
+}
+
+document.addEventListener('click', function(e) {
+  if (e.target.id !== 'locSearch' && e.target.className !== 'suggestion-item') {
+    const box = document.getElementById('suggestionsBox');
+    if (box) box.style.display = 'none';
+  }
+});
+
 
 // Prediction
 const NAMED=new Set(['Mysore Road','Bellary Road 1','Bellary Road 2','Tumkur Road','Hosur Road','ORR North 1','Old Madras Road','Magadi Road','ORR East 1','ORR North 2','Bannerghata Road','ORR East 2','West of Chord Road','ORR West 1','CBD 2','Hennur Main Road','IRR(Thanisandra road)','Varthur Road','Old Airport Road']);

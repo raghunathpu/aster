@@ -69,6 +69,16 @@ class RoutingEngine:
                 best_name = name
         return best_name
 
+    def find_nearest_k_junctions(self, lat: float, lon: float, k=3) -> list:
+        """Find the k nearest junctions to a coordinate and return their names."""
+        results = []
+        for name, coords in self.junctions.items():
+            dist = geodesic((lat, lon), coords).meters
+            results.append((name, dist))
+        # Sort by distance
+        results.sort(key=lambda x: x[1])
+        return [r[0] for r in results[:k]]
+
     def get_junction_coords(self, junction_name: str) -> tuple:
         """Get the latitude/longitude of a junction."""
         if self.graph is not None and self.graph.has_node(junction_name):
@@ -80,17 +90,17 @@ class RoutingEngine:
         """
         Recommend barricade placement boundary intersections surrounding the incident.
         """
-        if self.graph is None or not self.graph.has_node(event_junction):
+        neighbors_map = {
+            "QueensCircle": ["RichmondCircle", "TrinityCircle", "MekhriCircle", "AnilKumbleCircle"],
+            "Townhall": ["RichmondCircle", "CorporationCircle", "HudsonCircle", "Kashivishwanatha"],
+            "SilkBoard": ["DairyCircle", "Banashankari", "Domlur", "Agara", "BTM_Layout"],
+            "MekhriCircle": ["CauveryTheater", "SanjaynagarCross", "WindsorManor", "HebbalFlyover"],
+            "Marathahalli": ["Bellandur", "TinFactory", "KR_Puram"],
+            "Majestic": ["AnandRaoCircle", "SujathaTheater", "Kashivishwanatha"],
+            "HebbalFlyover": ["EsteemMall", "Kempapura", "MekhriCircle", "Goraguntepalya"]
+        }
+        if self.graph is None or not self.graph.has_node(event_junction) or event_junction in neighbors_map:
             # Fallback mock barricades based on nearby nodes
-            neighbors_map = {
-                "QueensCircle": ["RichmondCircle", "TrinityCircle", "MekhriCircle", "AnilKumbleCircle"],
-                "Townhall": ["RichmondCircle", "CorporationCircle", "HudsonCircle", "Kashivishwanatha"],
-                "SilkBoard": ["DairyCircle", "Banashankari", "Domlur", "Agara", "BTM_Layout"],
-                "MekhriCircle": ["CauveryTheater", "SanjaynagarCross", "WindsorManor", "HebbalFlyover"],
-                "Marathahalli": ["Bellandur", "TinFactory", "KR_Puram"],
-                "Majestic": ["AnandRaoCircle", "SujathaTheater", "Kashivishwanatha"],
-                "HebbalFlyover": ["EsteemMall", "Kempapura", "MekhriCircle", "Goraguntepalya"]
-            }
             nodes = neighbors_map.get(event_junction, ["RichmondCircle", "CorporationCircle"])
             recs = []
             for node in nodes:

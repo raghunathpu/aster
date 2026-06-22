@@ -32,6 +32,7 @@ from src.recommendation.engine import (
     generate_response_plan, plan_to_dict,
     RESPONSE_PRIORITY_TABLE, MANPOWER_TABLE
 )
+from src.utils.geocoding import geocode_location, detect_corridor_and_zone_py
 
 # ─────────────────────────────────────────────────────────────────
 # Page config
@@ -861,40 +862,121 @@ elif page == "🔮 Predict & Respond":
     st.markdown("*Enter an event — get an instant impact prediction and full operational response plan.*")
     st.markdown("---")
 
+    # Initialize session state keys for the inputs if not present
+    if "evt_type" not in st.session_state:
+        st.session_state["evt_type"] = "unplanned"
+    if "cause_key" not in st.session_state:
+        st.session_state["cause_key"] = "vehicle_breakdown"
+    if "road_closure" not in st.session_state:
+        st.session_state["road_closure"] = False
+    if "event_hour" not in st.session_state:
+        st.session_state["event_hour"] = datetime.datetime.now().hour
+    if "veh_type" not in st.session_state:
+        st.session_state["veh_type"] = "unknown"
+    if "loc_query" not in st.session_state:
+        st.session_state["loc_query"] = "Mysore Road, Bengaluru"
+    if "preset_coords" not in st.session_state:
+        st.session_state["preset_coords"] = None
+    if "show_advisory" not in st.session_state:
+        st.session_state["show_advisory"] = False
+
+    # If preset is scheduled, consume it and set session state values
+    if "preset" in st.session_state:
+        p = st.session_state["preset"]
+        st.session_state["evt_type"] = p.get("event_type", "unplanned")
+        st.session_state["cause_key"] = p.get("event_cause", "vehicle_breakdown")
+        st.session_state["road_closure"] = p.get("requires_road_closure", False)
+        st.session_state["event_hour"] = p.get("hour", 8)
+        st.session_state["veh_type"] = p.get("veh_type", "unknown")
+        st.session_state["loc_query"] = p.get("query", "Mysore Road, Bengaluru")
+        st.session_state["preset_coords"] = (p.get("latitude"), p.get("longitude"))
+        del st.session_state["preset"]
+
     col_form, col_result = st.columns([4, 5], gap="large")
 
     with col_form:
         st.markdown("### 📋 Event Details")
 
         with st.expander("▸ Event Classification", expanded=True):
-            event_type   = st.selectbox("Event Type", ["unplanned","planned"], format_func=str.title)
-            cause_key    = st.selectbox("Root Cause", list(CAUSE_LABELS.keys()), format_func=lambda x: CAUSE_LABELS[x])
-            road_closure = st.checkbox("Requires Road Closure")
+            event_type = st.selectbox(
+                "Event Type", 
+                ["unplanned", "planned"], 
+                index=["unplanned", "planned"].index(st.session_state["evt_type"]), 
+                format_func=str.title
+            )
+            cause_key = st.selectbox(
+                "Root Cause", 
+                list(CAUSE_LABELS.keys()), 
+                index=list(CAUSE_LABELS.keys()).index(st.session_state["cause_key"]), 
+                format_func=lambda x: CAUSE_LABELS[x]
+            )
+            road_closure = st.checkbox("Requires Road Closure", value=st.session_state["road_closure"])
 
-        with st.expander("▸ Location & Corridor", expanded=True):
-            corridor = st.selectbox("Corridor", CORRIDORS)
-            zone     = st.selectbox("Zone", ZONES)
-            if router:
-                junction_options = ["📍 Auto-detect from coordinates"] + sorted(list(router.junctions.keys()))
-                selected_junc = st.selectbox("Nearest Junction", junction_options)
+        with st.expander("▸ Location (Auto-Detect Corridor & Zone)", expanded=True):
+            loc_query = st.text_input(
+                "Enter Location (e.g., Mysore Road, Hebbal, Jayanagar)",
+                value=st.session_state["loc_query"],
+                key="location_search_query"
+            )
+            
+            # Geocode the location query
+            suggestions = geocode_location(loc_query)
+            
+            if suggestions:
+                choices = [s["address"] for s in suggestions]
+                
+                # Check if we have preset coordinates to select the closest suggestion
+                selected_index = 0
+                if st.session_state["preset_coords"] is not None:
+                    p_lat, p_lon = st.session_state["preset_coords"]
+                    min_dist = float('inf')
+                    for idx, s in enumerate(suggestions):
+                        dist = (s["lat"] - p_lat)**2 + (s["lon"] - p_lon)**2
+                        if dist < min_dist:
+                            min_dist = dist
+                            selected_index = idx
+                    # Clear preset_coords after applying it once
+                    st.session_state["preset_coords"] = None
+                
+                selected_address = st.selectbox(
+                    "Select exact matching location:",
+                    choices,
+                    index=selected_index
+                )
+                
+                selected_s = suggestions[choices.index(selected_address)]
+                lat, lon = selected_s["lat"], selected_s["lon"]
+                addr_text = selected_s["address"]
             else:
-                selected_junc = "📍 Auto-detect from coordinates"
-
-            if selected_junc != "📍 Auto-detect from coordinates" and router:
-                junc_lat, junc_lon = router.get_junction_coords(selected_junc)
-                st.info(f"📍 {selected_junc}: {junc_lat:.4f}, {junc_lon:.4f}")
-                lat, lon = junc_lat, junc_lon
-            else:
-                lat = st.number_input("Latitude",  value=12.97, min_value=12.7, max_value=13.3, step=0.001, format="%.4f")
-                lon = st.number_input("Longitude", value=77.59, min_value=77.3, max_value=77.9, step=0.001, format="%.4f")
+                st.warning("⚠️ No suggestions found. Please refine your query.")
+                lat, lon = 12.9716, 77.5946
+                addr_text = "Bengaluru, India"
+            
+            # Auto-detect corridor and zone
+            zone, corridor = detect_corridor_and_zone_py(lat, lon, df, addr_text)
+            
+            # Display detected parameters as read-only cards
+            st.markdown(f"""
+            <div style="background:linear-gradient(135deg, rgba(30,45,78,0.9), rgba(15,23,41,0.95)); padding:12px 16px; border-radius:12px; border:1px solid rgba(59,130,246,0.3); margin-top:10px; box-shadow:0 4px 15px rgba(0,0,0,0.25);">
+                <div style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.08em; color:#93C5FD; font-weight:700; margin-bottom:8px;">📍 Auto-Detected Parameters</div>
+                <div style="font-size:0.87rem; margin-bottom:4px;">🌍 <b>Latitude/Longitude:</b> {lat:.5f}, {lon:.5f}</div>
+                <div style="font-size:0.87rem; margin-bottom:4px;">🛣️ <b>Corridor:</b> {corridor}</div>
+                <div style="font-size:0.87rem; margin-bottom:4px;">🏢 <b>Zone:</b> {zone}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
         with st.expander("▸ Time & Vehicle", expanded=True):
-            event_hour = st.slider("Hour of Day (IST)", 0, 23, datetime.datetime.now().hour,
-                                   help="0=midnight, 8=8AM, 17=5PM")
-            veh_type   = st.selectbox("Vehicle Type", [
-                "unknown","heavy_vehicle","bmtc_bus","ksrtc_bus",
-                "private_bus","lcv","truck","private_car","taxi","auto","others"
-            ])
+            event_hour = st.slider(
+                "Hour of Day (IST)", 
+                0, 23, 
+                value=st.session_state["event_hour"],
+                help="0=midnight, 8=8AM, 17=5PM"
+            )
+            veh_type = st.selectbox(
+                "Vehicle Type", 
+                ["unknown","heavy_vehicle","bmtc_bus","ksrtc_bus","private_bus","lcv","truck","private_car","taxi","auto","others"],
+                index=["unknown","heavy_vehicle","bmtc_bus","ksrtc_bus","private_bus","lcv","truck","private_car","taxi","auto","others"].index(st.session_state["veh_type"])
+            )
 
         # Quick scenarios
         st.markdown("#### ⚡ Quick Scenarios")
@@ -902,29 +984,20 @@ elif page == "🔮 Predict & Respond":
         preset_event = {}
         if qcols[0].button("🚌 Bus Breakdown\nMysore Rd 8AM"):
             preset_event = {"event_type":"unplanned","event_cause":"vehicle_breakdown","requires_road_closure":False,
-                            "corridor":"Mysore Road","zone":"South Zone 2","latitude":12.97,"longitude":77.56,"hour":8,"veh_type":"bmtc_bus"}
+                            "latitude":12.97,"longitude":77.56,"hour":8,"veh_type":"bmtc_bus",
+                            "query": "Mysore Road, Bengaluru"}
         if qcols[1].button("🎤 Public Event\nCubbon Park 6PM"):
             preset_event = {"event_type":"planned","event_cause":"public_event","requires_road_closure":True,
-                            "corridor":"CBD 2","zone":"Central Zone 1","latitude":12.976,"longitude":77.593,"hour":18,"veh_type":"unknown"}
+                            "latitude":12.976,"longitude":77.593,"hour":18,"veh_type":"unknown",
+                            "query": "Cubbon Park, Bengaluru"}
         if qcols[2].button("💧 Water Logging\nORR East 9AM"):
             preset_event = {"event_type":"unplanned","event_cause":"water_logging","requires_road_closure":False,
-                            "corridor":"ORR East 2","zone":"East Zone 2","latitude":12.935,"longitude":77.696,"hour":9,"veh_type":"unknown"}
+                            "latitude":12.935,"longitude":77.696,"hour":9,"veh_type":"unknown",
+                            "query": "ORR East, Bengaluru"}
 
         if preset_event:
             st.session_state["preset"] = preset_event
             st.rerun()
-        if "preset" in st.session_state:
-            p = st.session_state["preset"]
-            event_type   = p.get("event_type", event_type)
-            cause_key    = p.get("event_cause", cause_key)
-            road_closure = p.get("requires_road_closure", road_closure)
-            corridor     = p.get("corridor", corridor)
-            zone         = p.get("zone", zone)
-            lat          = p.get("latitude", lat)
-            lon          = p.get("longitude", lon)
-            event_hour   = p.get("hour", event_hour)
-            veh_type     = p.get("veh_type", veh_type)
-            del st.session_state["preset"]
 
         # Weather context
         st.markdown("---")
@@ -938,7 +1011,36 @@ elif page == "🔮 Predict & Respond":
 
     # ── Results panel ─────────────────────────────────────────────
     with col_result:
-        if predict_btn and gb is not None:
+        # Check if predict button was clicked to capture current inputs
+        if predict_btn:
+            st.session_state["ran_analysis"] = True
+            st.session_state["show_advisory"] = False
+            st.session_state["analysis_inputs"] = {
+                "event_type": event_type,
+                "cause_key": cause_key,
+                "road_closure": road_closure,
+                "corridor": corridor,
+                "zone": zone,
+                "lat": lat,
+                "lon": lon,
+                "event_hour": event_hour,
+                "veh_type": veh_type
+            }
+
+        # Render results panel if analysis has been run
+        if st.session_state.get("ran_analysis") and gb is not None:
+            # Overwrite local variables with frozen session state values for rerun stability
+            inputs = st.session_state["analysis_inputs"]
+            event_type = inputs["event_type"]
+            cause_key = inputs["cause_key"]
+            road_closure = inputs["road_closure"]
+            corridor = inputs["corridor"]
+            zone = inputs["zone"]
+            lat = inputs["lat"]
+            lon = inputs["lon"]
+            event_hour = inputs["event_hour"]
+            veh_type = inputs["veh_type"]
+
             now_utc = pd.Timestamp.now(tz="Asia/Kolkata").replace(
                 hour=event_hour, minute=0
             ).tz_convert("UTC")
@@ -994,9 +1096,12 @@ elif page == "🔮 Predict & Respond":
                     try:
                         nearest_junc = router.find_nearest_junction(lat, lon)
                         barricades   = router.recommend_barricades(nearest_junc, impact_radius_hops=1)
-                        neighbors    = list(router.graph.neighbors(nearest_junc)) if router.graph else []
-                        if len(neighbors) >= 2:
-                            routes = router.get_alternative_routes(neighbors[0], neighbors[1], blocked_node=nearest_junc)
+                        
+                        # Find the closest junctions to compute a local detour/bypass route
+                        local_juncs = router.find_nearest_k_junctions(lat, lon, k=3)
+                        if len(local_juncs) >= 3:
+                            # Use the 2nd and 3rd closest junctions as source/target, avoiding the closest (the incident site)
+                            routes = router.get_alternative_routes(local_juncs[1], local_juncs[2], blocked_node=local_juncs[0])
                         else:
                             routes = router.get_alternative_routes("RichmondCircle", "CorporationCircle", blocked_node=nearest_junc)
                     except Exception:
@@ -1181,9 +1286,15 @@ elif page == "🔮 Predict & Respond":
             st.markdown("---")
 
             # ── Citizen Advisory (template-based, clearly labeled) ──
-            st.markdown("### 📢 Structured Citizen Advisory")
-            st.caption("📋 Template-based advisory system — generates structured alerts for each communication channel.")
-            if st.button("Generate Channel-Specific Advisory"):
+            st.markdown("### \U0001F4E3 Structured Citizen Advisory")
+            st.caption("\U0001F4CB Template-based advisory system — generates structured alerts for each communication channel.")
+            
+            if not st.session_state.get("show_advisory"):
+                if st.button("\U0001F4E3 Generate Public Advisory Draft", use_container_width=True):
+                    st.session_state["show_advisory"] = True
+                    st.rerun()
+            
+            if st.session_state.get("show_advisory"):
                 route_text = ""
                 if routes and len(routes) > 0:
                     route_text = f"Divert via {routes[0].get('description','alternative routes')}"
@@ -1192,20 +1303,20 @@ elif page == "🔮 Predict & Respond":
                 closure_line = "🚧 Road closure active\n" if road_closure else ""
 
                 wa_text = (
-                    f"🚨 *Traffic Alert — {corridor}*\n"
-                    f"⏰ {time_hr} | 📍 {nearest_junc}\n"
+                    f"\U0001F6A8 *Traffic Alert - {corridor}*\n"
+                    f"\u23F0 {time_hr} | \U0001F4CD {nearest_junc}\n"
                     f"Cause: {CAUSE_LABELS.get(cause_key, cause_key)}\n"
                     f"{closure_line}Expected delay: ~{res_time} mins\n"
-                    f"➡️ {route_text}\n"
-                    f"👮 Officers deployed | Priority: {eff_tier}\n"
+                    f"\u27A1\ufe0f {route_text}\n"
+                    f"\U0001F46E Officers deployed | Priority: {eff_tier}\n"
                     f"Source: ASTER Traffic Intelligence"
                 )
                 tw_text = (
-                    f"🚦 {eff_tier} congestion alert near {nearest_junc} on {corridor}. "
+                    f"\U0001F6A6 {eff_tier} congestion alert near {nearest_junc} on {corridor}. "
                     f"{CAUSE_LABELS.get(cause_key,cause_key)} causing ~{res_time}min delays. "
                     f"Avoid area. #BlrTraffic #ASTER"
                 )[:280]
-                vms_text = f"SLOW {nearest_junc[:10].upper()} — USE BYPASS"
+                vms_text = f"SLOW {nearest_junc[:10].upper()} - USE BYPASS"
                 radio_text = (
                     f"Attention Bengaluru commuters: A {CAUSE_LABELS.get(cause_key,'traffic').lower()} "
                     f"on {corridor} near {nearest_junc} is causing approximately {res_time} minutes of delay. "
@@ -1213,15 +1324,19 @@ elif page == "🔮 Predict & Respond":
                     f"Alternate routes are available. Officers are on site."
                 )
 
-                col_wa, col_tw = st.columns(2)
-                with col_wa:
-                    st.info(f"📱 **WhatsApp BTP Broadcast:**\n\n{wa_text}")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.info(f"\U0001F4F1 **WhatsApp BTP Broadcast:**\n\n{wa_text}")
                     wa_url = f"https://wa.me/?text={urllib.parse.quote(wa_text)}"
-                    st.link_button("📲 Open WhatsApp", wa_url)
-                with col_tw:
-                    st.info(f"🐦 **Twitter/X ({len(tw_text)} chars):**\n\n{tw_text}")
-                    st.warning(f"📺 **VMS Board (40 chars):**\n\n{vms_text}")
-                    st.success(f"📻 **Radio Script:**\n\n{radio_text}")
+                    st.link_button("\U0001F4F2 Open WhatsApp", wa_url, use_container_width=True)
+                    st.warning(f"\U0001F4FA **VMS Board (40 chars):**\n\n{vms_text}")
+                with col2:
+                    st.info(f"\U0001F426 **Twitter/X ({len(tw_text)} chars):**\n\n{tw_text}")
+                    st.success(f"\U0001F4FB **Radio Script:**\n\n{radio_text}")
+                
+                if st.button("Collapse Advisory Draft", use_container_width=True):
+                    st.session_state["show_advisory"] = False
+                    st.rerun()
 
             st.markdown("---")
 
@@ -1253,6 +1368,18 @@ elif page == "🔮 Predict & Respond":
 
             st.markdown("**Barricading:** " + plan_d["barricading"])
             st.markdown("**Diversion:** " + plan_d["diversion_urgency"])
+            
+            if routes and len(routes) > 0:
+                st.markdown("**Recommended Diversion Routes:**")
+                for i, r in enumerate(routes, 1):
+                    if r.get("path"):
+                        nodes_path = " ➔ ".join([n.replace('_', ' ') for n in r.get("path")])
+                    else:
+                        nodes_path = r.get("description", f"Alternative Route {i}")
+                    dist_km = r.get("distance_m", 0) / 1000.0
+                    time_min = r.get("travel_time_min", 0)
+                    st.markdown(f"  * \u27A1\ufe0f **{r.get('description', f'Route {i}')}:** {nodes_path} ({dist_km:.2f} km, ~{time_min:.1f} mins)")
+
             st.markdown(f'*{plan_d["risk_reasoning"]}*')
 
             if plan_d.get("escalation_triggers"):
