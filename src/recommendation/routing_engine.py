@@ -101,7 +101,15 @@ class RoutingEngine:
         }
         if self.graph is None or not self.graph.has_node(event_junction) or event_junction in neighbors_map:
             # Fallback mock barricades based on nearby nodes
-            nodes = neighbors_map.get(event_junction, ["RichmondCircle", "CorporationCircle"])
+            nodes = neighbors_map.get(event_junction)
+            if not nodes:
+                coords = self.get_junction_coords(event_junction)
+                if coords:
+                    nearest = self.find_nearest_k_junctions(coords[0], coords[1], k=4)
+                    nodes = [n for n in nearest if n != event_junction][:2]
+                else:
+                    nodes = ["RichmondCircle", "CorporationCircle"]
+                    
             recs = []
             for node in nodes:
                 coords = self.get_junction_coords(node)
@@ -166,10 +174,13 @@ class RoutingEngine:
             nearby = [n for n in all_nodes if n not in [source, target, blocked_node] 
                      and geodesic(src_coords, self.junctions[n]).meters < 4000]
             
+            routes = []
+            
+            # Primary Route
             path_nodes = [source]
             path_coords_list = [list(src_coords)]
             
-            if nearby:
+            if nearby and len(nearby) > 0:
                 bypass = nearby[0]
                 path_nodes.append(bypass)
                 path_coords_list.append(list(self.junctions[bypass]))
@@ -180,19 +191,46 @@ class RoutingEngine:
             path_nodes.append(target)
             path_coords_list.append(list(tgt_coords))
             
-            dist_m = int(geodesic(src_coords, mid_coords).meters + geodesic(mid_coords, tgt_coords).meters)
+            dist_m = int(geodesic(src_coords, path_coords_list[1]).meters + geodesic(path_coords_list[1], tgt_coords).meters)
             
-            return [
-                {
-                    "route_id": 1,
-                    "path": path_nodes,
-                    "path_coordinates": path_coords_list,
-                    "travel_time_min": round((dist_m / 8.33) / 60.0, 2),
-                    "distance_m": dist_m,
-                    "congestion_index": 0.1,
-                    "description": f"Via {path_nodes[1].replace('_', ' ')}"
-                }
-            ]
+            routes.append({
+                "route_id": 1,
+                "path": path_nodes,
+                "path_coordinates": path_coords_list,
+                "travel_time_min": round((dist_m / 8.33) / 60.0, 2),
+                "distance_m": dist_m,
+                "congestion_index": 0.1,
+                "description": f"Via {path_nodes[1].replace('_', ' ')}"
+            })
+            
+            # Alternate Route
+            path_nodes_alt = [source]
+            path_coords_list_alt = [list(src_coords)]
+            
+            if nearby and len(nearby) > 1:
+                bypass_alt = nearby[1]
+                path_nodes_alt.append(bypass_alt)
+                path_coords_list_alt.append(list(self.junctions[bypass_alt]))
+            else:
+                path_nodes_alt.append("Alternate_Bypass")
+                path_coords_list_alt.append([mid_coords[0] - 0.003, mid_coords[1] + 0.003])
+                
+            path_nodes_alt.append(target)
+            path_coords_list_alt.append(list(tgt_coords))
+            
+            dist_m_alt = int(geodesic(src_coords, path_coords_list_alt[1]).meters + geodesic(path_coords_list_alt[1], tgt_coords).meters)
+            
+            routes.append({
+                "route_id": 2,
+                "path": path_nodes_alt,
+                "path_coordinates": path_coords_list_alt,
+                "travel_time_min": round((dist_m_alt / 8.33) / 60.0, 2) + 2.0,
+                "distance_m": dist_m_alt,
+                "congestion_index": 0.2,
+                "description": f"Via {path_nodes_alt[1].replace('_', ' ')}"
+            })
+            
+            return routes
 
         # Make a copy of the graph to remove blocked edges
         working_graph = self.graph.copy()
