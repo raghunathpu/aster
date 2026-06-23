@@ -17,7 +17,8 @@ from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, mean_absolu
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
 
-from src.modeling.train import load_and_prepare
+from src.modeling.train import load_data, remove_leaky_cols
+from src.features.feature_engineering import build_features, encode_for_model
 from src.modeling.train_lgb import prepare_lgb_features
 from src.modeling.lgb_inference import FEATURE_ORDER
 
@@ -38,21 +39,32 @@ def test_primary_models():
     gb = joblib.load(os.path.join(MODELS_DIR, "gb_main.pkl"))
     le = joblib.load(os.path.join(MODELS_DIR, "label_encoder.pkl"))
     
-    # Prepare test set
-    X, y_enc, _, _, _ = load_and_prepare(DATA_PATH)
-    _, X_test, _, y_test = train_test_split(
-        X, y_enc, test_size=0.2, stratify=y_enc, random_state=42
-    )
+    # Prepare test set exactly as train.py does
+    df = load_data(DATA_PATH)
+    n_train = int(len(df) * 0.8)
+    df_train = df.iloc[:n_train].copy()
+    df_test = df.iloc[n_train:].copy()
+    
+    df_train, freq_maps = build_features(df_train)
+    df_test, _ = build_features(df_test, freq_maps)
+    
+    X_train_all, encoders = encode_for_model(df_train)
+    X_test_all, _ = encode_for_model(df_test, encoders)
+    
+    y_test = le.transform(df_test["impact_tier"])
+    
+    # Remove leaky columns for GB honest model
+    X_test_honest = remove_leaky_cols(X_test_all)
 
-    print(f"Test Set Size: {X_test.shape[0]} samples")
+    print(f"Test Set Size: {X_test_all.shape[0]} samples")
 
-    # Evaluate RF
-    rf_pred = rf.predict(X_test)
+    # Evaluate RF (baseline uses all features)
+    rf_pred = rf.predict(X_test_all)
     rf_acc = accuracy_score(y_test, rf_pred)
     rf_f1 = f1_score(y_test, rf_pred, average="macro")
     
-    # Evaluate GB
-    gb_pred = gb.predict(X_test)
+    # Evaluate GB (honest uses filtered features)
+    gb_pred = gb.predict(X_test_honest)
     gb_acc = accuracy_score(y_test, gb_pred)
     gb_f1 = f1_score(y_test, gb_pred, average="macro")
 
@@ -65,8 +77,8 @@ def test_primary_models():
     print(f"  F1 (macro): {gb_f1*100:.2f}%")
 
     # Automated Assertions
-    assert gb_acc > 0.85, f"GB Accuracy ({gb_acc:.4f}) is below the required 85% threshold."
-    assert gb_f1 > 0.80, f"GB F1-Score ({gb_f1:.4f}) is below the required 80% threshold."
+    assert gb_acc > 0.65, f"GB Accuracy ({gb_acc:.4f}) is below the required 65% threshold."
+    assert gb_f1 > 0.65, f"GB F1-Score ({gb_f1:.4f}) is below the required 65% threshold."
     print("\n[PASS] Primary Model tests PASSED (realistic metrics, target leakage resolved).")
     return True
 

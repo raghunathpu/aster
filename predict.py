@@ -1,4 +1,4 @@
-﻿"""
+"""
 ASTER - Prediction CLI
 =======================
 Quick command-line test of the inference + recommendation engine.
@@ -9,9 +9,14 @@ Usage:
 """
 
 import argparse
-import json
-import os
 import sys
+import pandas as pd
+import numpy as np
+import joblib
+import os
+
+# Ensure windows console can print emojis without crashing
+sys.stdout.reconfigure(encoding='utf-8')
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)

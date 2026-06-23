@@ -1276,7 +1276,8 @@ elif page == "🔮 Predict & Respond":
                     f"{CAUSE_LABELS.get(cause_key, cause_key)} at {nearest_junc}",
                     barricades, routes
                 )
-                st.html(leaflet_html)
+                import streamlit.components.v1 as components
+                components.html(leaflet_html, height=500)
             else:
                 st.info("Map components unavailable — routing engine not loaded.")
 
