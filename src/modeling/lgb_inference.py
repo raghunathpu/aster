@@ -156,6 +156,9 @@ class LGBInferenceService:
             avg_eis = group["eis_scaled"].mean()
             self.geohash_stats[g_key] = {
                 "total": total,
+                "closures": closures,
+                "high_prios": high_prios,
+                "eis_sum": group["eis_scaled"].sum(),
                 "closure_rate": closures / total,
                 "high_prio_rate": high_prios / total,
                 "avg_eis": avg_eis
@@ -169,6 +172,8 @@ class LGBInferenceService:
             avg_eis = group["eis_scaled"].mean()
             self.corridor_stats[c_key] = {
                 "total": total,
+                "closures": closures,
+                "eis_sum": group["eis_scaled"].sum(),
                 "closure_rate": closures / total,
                 "avg_eis": avg_eis
             }
@@ -294,14 +299,34 @@ class LGBInferenceService:
         f["cause_at_location_count"] = float(gh_s.get("total", 5.0)) * 0.2
         f["is_repeat_location"] = 1.0 if f["junction_event_count"] > 1 else 0.0
 
-        # (Lookups are already retrieved above)
-        f["geohash_total_events"] = float(gh_s.get("total", 1.0))
-        f["geohash_closure_rate"] = float(gh_s.get("closure_rate", 0.1))
-        f["geohash_high_priority_rate"] = float(gh_s.get("high_prio_rate", 0.2))
-        f["geohash_avg_eis"] = float(gh_s.get("avg_eis", 0.3))
+        # (LOO target encoding adjustment to prevent data leakage)
+        gh_total = float(gh_s.get("total", 0.0))
+        gh_closures = float(gh_s.get("closures", 0.0))
+        gh_high = float(gh_s.get("high_prios", 0.0))
+        gh_eis_sum = float(gh_s.get("eis_sum", 0.0))
+        
+        # If this event might be in the historical stats, subtract average expected contribution
+        if gh_total > 1:
+            gh_total -= 1
+            gh_closures -= (gh_closures / (gh_total + 1))
+            gh_high -= (gh_high / (gh_total + 1))
+            gh_eis_sum -= (gh_eis_sum / (gh_total + 1))
 
-        f["corridor_closure_rate"] = float(corr_s.get("closure_rate", 0.1))
-        f["corridor_avg_eis"] = float(corr_s.get("avg_eis", 0.3))
+        f["geohash_total_events"] = gh_total if gh_total > 0 else 1.0
+        f["geohash_closure_rate"] = gh_closures / gh_total if gh_total > 0 else 0.1
+        f["geohash_high_priority_rate"] = gh_high / gh_total if gh_total > 0 else 0.2
+        f["geohash_avg_eis"] = gh_eis_sum / gh_total if gh_total > 0 else 0.3
+
+        corr_total = float(corr_s.get("total", 0.0))
+        corr_closures = float(corr_s.get("closures", 0.0))
+        corr_eis_sum = float(corr_s.get("eis_sum", 0.0))
+        if corr_total > 1:
+            corr_total -= 1
+            corr_closures -= (corr_closures / (corr_total + 1))
+            corr_eis_sum -= (corr_eis_sum / (corr_total + 1))
+
+        f["corridor_closure_rate"] = corr_closures / corr_total if corr_total > 0 else 0.1
+        f["corridor_avg_eis"] = corr_eis_sum / corr_total if corr_total > 0 else 0.3
 
         # Interactions
         f["rush_hour_x_planned"] = f["is_rush_hour"] * f["is_planned"]

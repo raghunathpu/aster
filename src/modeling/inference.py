@@ -5,7 +5,7 @@ Loads trained model artefacts and provides prediction interface
 for both single events and batch inputs.
 """
 
-import os, sys, json, joblib
+import os, sys, joblib
 import numpy as np
 import pandas as pd
 import zoneinfo

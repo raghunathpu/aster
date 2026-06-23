@@ -8,7 +8,7 @@ All thresholds are grounded in BTP Standard Operating Procedures (assumed)
 and the distribution patterns observed in the training dataset.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, List
 
 

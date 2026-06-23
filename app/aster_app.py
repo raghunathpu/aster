@@ -6,7 +6,7 @@ Streamlit Demo Application  ·  Final Hackathon Build
 Run:  streamlit run app/aster_app.py
 """
 
-import os, sys, json, joblib, datetime, warnings, math, io, csv
+import os, sys, json, joblib, datetime, warnings, io, csv
 import requests
 
 warnings.filterwarnings("ignore")
@@ -16,7 +16,6 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import seaborn as sns
 import streamlit as st
 import pydeck as pdk
@@ -29,8 +28,7 @@ sys.path.insert(0, ROOT)
 from src.preprocessing.data_loader import preprocess
 from src.features.feature_engineering import build_features, encode_for_model
 from src.recommendation.engine import (
-    generate_response_plan, plan_to_dict,
-    RESPONSE_PRIORITY_TABLE, MANPOWER_TABLE
+    generate_response_plan, plan_to_dict
 )
 from src.utils.geocoding import geocode_location, detect_corridor_and_zone_py
 
@@ -633,7 +631,7 @@ plans — in under 2 seconds.
         st.markdown("### Impact Distribution")
         img_path = os.path.join(ASSETS, "eda_impact_dist.png")
         if os.path.exists(img_path):
-            st.image(img_path, use_container_width=True)
+            st.image(img_path, width="stretch")
 
         st.markdown("### The Three-Tier System")
         for tier, color, desc in [
@@ -683,26 +681,26 @@ elif page == "📊 EDA & Insights":
         with c1:
             st.markdown("#### Event Cause Distribution")
             img = os.path.join(ASSETS, "eda_cause_dist.png")
-            if os.path.exists(img): st.image(img, use_container_width=True)
+            if os.path.exists(img): st.image(img, width="stretch")
             st.caption("Vehicle breakdowns dominate (60%). High-impact causes form a critical minority requiring elevated response.")
         with c2:
             st.markdown("#### Cause × Impact Tier Heatmap")
             img = os.path.join(ASSETS, "eda_heatmap.png")
-            if os.path.exists(img): st.image(img, use_container_width=True)
+            if os.path.exists(img): st.image(img, width="stretch")
             st.caption("Accidents, construction, and public events show the highest High-impact concentration.")
         st.markdown("#### Impact Tier Distribution")
         img = os.path.join(ASSETS, "eda_impact_dist.png")
-        if os.path.exists(img): st.image(img, use_container_width=True)
+        if os.path.exists(img): st.image(img, width="stretch")
 
     with tab2:
         st.markdown("#### Monthly Event Volume Trend")
         img = os.path.join(ASSETS, "eda_monthly_trend.png")
-        if os.path.exists(img): st.image(img, use_container_width=True)
+        if os.path.exists(img): st.image(img, width="stretch")
         st.caption("March 2024 saw peak volume (1,929 events). Planned events peak in construction season (Nov–Mar).")
 
         st.markdown("#### Hourly Distribution (IST)")
         img = os.path.join(ASSETS, "eda_hourly.png")
-        if os.path.exists(img): st.image(img, use_container_width=True)
+        if os.path.exists(img): st.image(img, width="stretch")
         st.caption("High 0–5 AM logging reflects shift-start patrol reporting. True peaks: morning (7–10 AM) and evening (5–9 PM).")
 
         col_a, col_b = st.columns(2)
@@ -729,19 +727,19 @@ elif page == "📊 EDA & Insights":
         with col_b:
             st.markdown("**Event Resolution Time**")
             img = os.path.join(ASSETS, "eda_duration.png")
-            if os.path.exists(img): st.image(img, use_container_width=True)
+            if os.path.exists(img): st.image(img, width="stretch")
 
     with tab3:
         c1, c2 = st.columns(2)
         with c1:
             st.markdown("#### Top Corridors by Volume")
             img = os.path.join(ASSETS, "eda_corridors.png")
-            if os.path.exists(img): st.image(img, use_container_width=True)
+            if os.path.exists(img): st.image(img, width="stretch")
             st.caption("Mysore Road leads with 743 events. All named corridors classified High priority.")
         with c2:
             st.markdown("#### Zone-Wise Event Density")
             img = os.path.join(ASSETS, "eda_zones.png")
-            if os.path.exists(img): st.image(img, use_container_width=True)
+            if os.path.exists(img): st.image(img, width="stretch")
             st.caption("Central Zone 2 and West Zone 1 show highest combined event density.")
 
         st.markdown("#### Hotspot Police Stations (top 15)")
@@ -754,7 +752,7 @@ elif page == "📊 EDA & Insights":
         st.dataframe(ps_agg.reset_index().rename(columns={
             "police_station":"Police Station","total":"Total","high_impact":"High Impact",
             "road_closures":"Road Closures","high_%":"High %"
-        }), use_container_width=True, hide_index=True)
+        }), width="stretch", hide_index=True)
 
         st.markdown("#### Corridor Risk Calendar — When is Each Corridor Most Dangerous?")
         high_df = df[(df["impact_tier"] == "High") & (df["corridor"] != "Non-corridor")].copy()
@@ -1007,7 +1005,7 @@ elif page == "🔮 Predict & Respond":
                    unsafe_allow_html=True)
         apply_weather = wx_multiplier > 1.0
 
-        predict_btn = st.button("🚀  Analyse Event & Generate Response Plan", use_container_width=True)
+        predict_btn = st.button("🚀  Analyse Event & Generate Response Plan", width="stretch")
 
     # ── Results panel ─────────────────────────────────────────────
     with col_result:
@@ -1278,8 +1276,7 @@ elif page == "🔮 Predict & Respond":
                     f"{CAUSE_LABELS.get(cause_key, cause_key)} at {nearest_junc}",
                     barricades, routes
                 )
-                import streamlit.components.v1 as components
-                components.html(leaflet_html, height=420, scrolling=False)
+                st.html(leaflet_html)
             else:
                 st.info("Map components unavailable — routing engine not loaded.")
 
@@ -1290,7 +1287,7 @@ elif page == "🔮 Predict & Respond":
             st.caption("\U0001F4CB Template-based advisory system — generates structured alerts for each communication channel.")
             
             if not st.session_state.get("show_advisory"):
-                if st.button("\U0001F4E3 Generate Public Advisory Draft", use_container_width=True):
+                if st.button("\U0001F4E3 Generate Public Advisory Draft", width="stretch"):
                     st.session_state["show_advisory"] = True
                     st.rerun()
             
@@ -1328,13 +1325,13 @@ elif page == "🔮 Predict & Respond":
                 with col1:
                     st.info(f"\U0001F4F1 **WhatsApp BTP Broadcast:**\n\n{wa_text}")
                     wa_url = f"https://wa.me/?text={urllib.parse.quote(wa_text)}"
-                    st.link_button("\U0001F4F2 Open WhatsApp", wa_url, use_container_width=True)
+                    st.link_button("\U0001F4F2 Open WhatsApp", wa_url, width="stretch")
                     st.warning(f"\U0001F4FA **VMS Board (40 chars):**\n\n{vms_text}")
                 with col2:
                     st.info(f"\U0001F426 **Twitter/X ({len(tw_text)} chars):**\n\n{tw_text}")
                     st.success(f"\U0001F4FB **Radio Script:**\n\n{radio_text}")
                 
-                if st.button("Collapse Advisory Draft", use_container_width=True):
+                if st.button("Collapse Advisory Draft", width="stretch"):
                     st.session_state["show_advisory"] = False
                     st.rerun()
 
@@ -1415,7 +1412,7 @@ elif page == "🔮 Predict & Respond":
                         initial_view_state=pdk.ViewState(latitude=lat, longitude=lon, zoom=10)))
                 with c_table:
                     st.dataframe(alloc_df.drop(columns=["lat","lon","color"]),
-                                use_container_width=True, hide_index=True)
+                                width="stretch", hide_index=True)
                     total_alloc = sum(a["allocated_officers"] for a in allocations)
                     st.markdown(f"**Pool Utilization:** `{total_alloc} / 30` Officers Active")
                     st.progress(total_alloc / 30.0)
@@ -1560,7 +1557,7 @@ elif page == "📦 Batch Triage":
                           "ERROR":"color:#94A3B8"}
                 return colors.get(val, "")
 
-            st.dataframe(result_df, use_container_width=True, hide_index=True)
+            st.dataframe(result_df, width="stretch", hide_index=True)
 
             # Summary
             if results:
@@ -1620,7 +1617,7 @@ elif page == "📅 Pre-Event Planner":
                             "Large (15k–40k)": 1.3, "Mega (>40k)": 1.5}
         crowd_mult = crowd_multipliers.get(crowd_size, 1.0)
 
-        plan_btn = st.button("📊 Generate Deployment Forecast & Plan", use_container_width=True)
+        plan_btn = st.button("📊 Generate Deployment Forecast & Plan", width="stretch")
 
     with c2:
         if plan_btn:
@@ -1775,13 +1772,13 @@ elif page == "📈 Model Performance":
         st.markdown("#### Confusion Matrix — Honest Model")
         img = os.path.join(ASSETS, "confusion_matrix.png")
         if os.path.exists(img):
-            st.image(img, use_container_width=True)
+            st.image(img, width="stretch")
             st.caption("Trained on pre-dispatch features only. Realistic, honest separation across all three tiers.")
     with col_b:
         st.markdown("#### Top Feature Importances")
         img = os.path.join(ASSETS, "feature_importance.png")
         if os.path.exists(img):
-            st.image(img, use_container_width=True)
+            st.image(img, width="stretch")
 
     st.markdown("#### Model Comparison Table")
     comp_rows = [
@@ -1802,7 +1799,7 @@ elif page == "📈 Model Performance":
             "F1 Macro": f"{srv_m.get('f1_macro',0)*100:.2f}%",
             "AUC-ROC": f"{srv_m.get('auc_roc',0):.4f}"
         })
-    st.dataframe(pd.DataFrame(comp_rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(comp_rows), width="stretch", hide_index=True)
 
     # Leakage explanation
     st.markdown("---")
@@ -1859,7 +1856,7 @@ The `impact_tier` label is derived from four operational signals:
                 f"R²: {rs_m.get('r2',0):.4f}"
             ]
         })
-        st.dataframe(lgb_comp, use_container_width=True, hide_index=True)
+        st.dataframe(lgb_comp, width="stretch", hide_index=True)
     else:
         st.info("LightGBM metrics not available. Run `python train.py` first.")
 
@@ -1924,7 +1921,7 @@ elif page == "🧠 Post-Event Learning":
             cols_show = [c for c in cols_show if c in df.columns]
             res = df[df["corridor"].str.contains(search_q, case=False, na=False)]
             if len(res) > 0:
-                st.dataframe(res[cols_show].head(10), use_container_width=True, hide_index=True)
+                st.dataframe(res[cols_show].head(10), width="stretch", hide_index=True)
                 st.caption(f"Found {len(res)} matching incidents.")
             else:
                 st.caption("No matches found.")
@@ -1988,7 +1985,7 @@ elif page == "🧠 Post-Event Learning":
                     if len(mismatches) > 0:
                         st.markdown("**Mismatch Summary:**")
                         st.dataframe(mismatches[["event_id","predicted_tier","actual_tier"]].head(5),
-                                    use_container_width=True, hide_index=True)
+                                    width="stretch", hide_index=True)
             except Exception:
                 pass
 

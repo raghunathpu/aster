@@ -6,7 +6,6 @@ Every feature is operationally grounded in Bengaluru traffic realities.
 """
 
 import pandas as pd
-import numpy as np
 
 
 # ──────────────────────────────────────────────

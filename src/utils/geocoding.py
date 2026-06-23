@@ -1,7 +1,4 @@
 import streamlit as st
-import pandas as pd
-import math
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def geocode_location(query):
     """Geocode a search query to a list of matching addresses and coordinates in Bengaluru."""

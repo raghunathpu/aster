@@ -9,6 +9,16 @@ __pycache__/
 # App feedback logs and local databases
 data/feedback_log.csv
 data/feedback_log.csv.tmp
+models/feedback_log.csv
+models/lgb/historical_stats.json
+
+# Streamlit runtime logs
+streamlit.log
+streamlit_utf8.log
+*.log
+
+# Scratch / throwaway scripts
+scratch/
 
 # Environments
 .env
